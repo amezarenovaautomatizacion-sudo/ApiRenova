@@ -27,7 +27,7 @@ const startServer = async () => {
       console.log(`http://localhost:${PORT}/api/reportes/empleados`);
       console.log('='.repeat(50));
       console.log('\nUsa POSTMAN o cURL para probar los endpoints.');
-      console.log('Usuario de prueba: nuevo@empresa.com / contraseña en BD');
+      console.log('Usuario de prueba: admin@renova.com / contraseña en BD');
       console.log('='.repeat(50));
     });
 

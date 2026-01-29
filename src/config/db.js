@@ -63,8 +63,8 @@ const testConnection = async () => {
     console.log(`Base de datos: ${process.env.DB_NAME || 'api_node'}`);
     return true;
   } catch (error) {
-    console.error('❌ Error conectando a MySQL:', error.message);
-    console.log('\n🔧 Verifica que:');
+    console.error('Error conectando a MySQL:', error.message);
+    console.log('\nVerifica que:');
     console.log('   1. MySQL esté corriendo');
     console.log('   2. Las credenciales en .env sean correctas');
     console.log('   3. La base de datos exista');
