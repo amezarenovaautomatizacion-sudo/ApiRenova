@@ -10,10 +10,14 @@ app.use(helmet());
 
 // Configuración CORS
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
-  optionsSuccessStatus: 200
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: true
 };
+
 app.use(cors(corsOptions));
+
 
 // Middlewares
 app.use(morgan('dev'));

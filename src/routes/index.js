@@ -1,3 +1,4 @@
+// src/routes/index.js
 const express = require('express');
 const router = express.Router();
 
@@ -8,16 +9,15 @@ const vacacionesRoutes = require('./vacaciones.routes');
 const asistenciasRoutes = require('./asistencias.routes');
 const proyectosRoutes = require('./proyectos.routes');
 const reportesRoutes = require('./reportes.routes');
+const dashboardRoutes = require('./dashboard.routes'); // ← Asegúrate que esta línea existe
 
-// Rutas principales
+// Montar rutas
 router.use('/auth', authRoutes);
 router.use('/empleados', empleadosRoutes);
 router.use('/vacaciones', vacacionesRoutes);
 router.use('/asistencias', asistenciasRoutes);
 router.use('/proyectos', proyectosRoutes);
 router.use('/reportes', reportesRoutes);
-
-// Dashboard route
-router.get('/dashboard', require('../controllers/dashboard.controller').getDashboard);
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router;

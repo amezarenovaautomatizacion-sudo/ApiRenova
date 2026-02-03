@@ -61,9 +61,9 @@ exports.reporteEmpleados = async (req, res) => {
 
     if (formato === 'csv') {
       // Convertir a CSV (simplificado)
-      let csv = 'ID,Nombre,Apellido,Departamento,Puesto,Salario,Email\n';
+      let csv = 'ID,Nombre,Apellido,Identificacion,Email,Telefono,Departamento,Puesto,Salario,Fecha Contratacion\n';
       empleados.forEach(emp => {
-        csv += `${emp.id_empleado},"${emp.nombre}","${emp.apellido}","${emp.nombre_departamento}","${emp.nombre_puesto}",${emp.salario_base},"${emp.email}"\n`;
+        csv += `${emp.id_empleado},"${emp.nombre}","${emp.apellido}","${emp.identificacion}","${emp.email || ''}","${emp.telefono || ''}","${emp.nombre_departamento || ''}","${emp.nombre_puesto || ''}",${emp.salario_base || 0},"${emp.fecha_contratacion}"\n`;
       });
       
       res.setHeader('Content-Type', 'text/csv');
@@ -88,7 +88,7 @@ exports.reporteEmpleados = async (req, res) => {
 // Reporte de asistencias
 exports.reporteAsistencias = async (req, res) => {
   try {
-    const { fecha_inicio, fecha_fin, id_departamento, formato } = req.query;
+    const { fecha_inicio, fecha_fin, id_departamento, formato = 'json' } = req.query;
 
     if (!fecha_inicio || !fecha_fin) {
       return res.status(400).json({
@@ -174,9 +174,9 @@ exports.reporteAsistencias = async (req, res) => {
     };
 
     if (formato === 'csv') {
-      let csv = 'Fecha,Empleado,Departamento,Entrada,Salida,Horas,Estado\n';
+      let csv = 'ID,Fecha,Empleado,Identificacion,Departamento,Puesto,Entrada,Salida,Horas,Estado,Observaciones\n';
       asistencias.forEach(a => {
-        csv += `${a.fecha},"${a.nombre} ${a.apellido}","${a.nombre_departamento}",${a.hora_entrada || ''},${a.hora_salida || ''},${a.horas_trabajadas || 0},"${a.estado}"\n`;
+        csv += `${a.id_asistencia},${a.fecha},"${a.nombre} ${a.apellido}",${a.identificacion},"${a.nombre_departamento || ''}","${a.nombre_puesto || ''}",${a.hora_entrada || ''},${a.hora_salida || ''},${a.horas_trabajadas || 0},"${a.estado}","${a.observaciones || ''}"\n`;
       });
       
       res.setHeader('Content-Type', 'text/csv');
@@ -201,7 +201,7 @@ exports.reporteAsistencias = async (req, res) => {
 // Reporte de vacaciones
 exports.reporteVacaciones = async (req, res) => {
   try {
-    const { año = new Date().getFullYear(), id_departamento, formato } = req.query;
+    const { año = new Date().getFullYear(), id_departamento, formato = 'json' } = req.query;
 
     const reporte = await query(`
       SELECT 
@@ -270,9 +270,9 @@ exports.reporteVacaciones = async (req, res) => {
     };
 
     if (formato === 'csv') {
-      let csv = 'Empleado,Departamento,Puesto,Solicitudes,Días Aprobados,Días Rechazados,Días Pendientes,Tipos\n';
+      let csv = 'ID Empleado,Nombre,Apellido,Departamento,Puesto,Solicitudes,Días Aprobados,Días Rechazados,Días Pendientes,Tipos Usados\n';
       reporte.forEach(r => {
-        csv += `"${r.nombre} ${r.apellido}","${r.nombre_departamento}","${r.nombre_puesto}",${r.total_solicitudes},${r.dias_aprobados},${r.dias_rechazados},${r.dias_pendientes},"${r.tipos_usados || ''}"\n`;
+        csv += `${r.id_empleado},"${r.nombre}","${r.apellido}","${r.nombre_departamento || ''}","${r.nombre_puesto || ''}",${r.total_solicitudes},${r.dias_aprobados || 0},${r.dias_rechazados || 0},${r.dias_pendientes || 0},"${r.tipos_usados || ''}"\n`;
       });
       
       res.setHeader('Content-Type', 'text/csv');
@@ -297,16 +297,9 @@ exports.reporteVacaciones = async (req, res) => {
 // Reporte de nómina (ejemplo simplificado)
 exports.reporteNomina = async (req, res) => {
   try {
-    const { mes, año } = req.query;
+    const { mes, año, formato = 'json' } = req.query;
     const mesActual = mes || new Date().getMonth() + 1;
     const añoActual = año || new Date().getFullYear();
-
-    // Este es un ejemplo básico. En un sistema real, calcularías:
-    // - Salario base
-    // - Horas extras
-    // - Deducciones
-    // - Bonificaciones
-    // - Impuestos
 
     const reporte = await query(`
       SELECT 
@@ -317,7 +310,7 @@ exports.reporteNomina = async (req, res) => {
         d.nombre_departamento,
         p.nombre_puesto,
         e.salario_base,
-        e.salario_base as salario_neto, -- Simplificado
+        e.salario_base as salario_neto,
         'Pendiente' as estado_pago,
         CURDATE() as fecha_generacion
       FROM empleados e
@@ -336,16 +329,29 @@ exports.reporteNomina = async (req, res) => {
       WHERE activo = 1
     `);
 
+    const resultado = {
+      metadata: {
+        generado: new Date().toISOString(),
+        periodo: `${mesActual}/${añoActual}`,
+        totales
+      },
+      detalle: reporte
+    };
+
+    if (formato === 'csv') {
+      let csv = 'ID,Nombre,Apellido,Identificacion,Departamento,Puesto,Salario Base,Salario Neto,Estado Pago,Fecha Generacion\n';
+      reporte.forEach(r => {
+        csv += `${r.id_empleado},"${r.nombre}","${r.apellido}","${r.identificacion}","${r.nombre_departamento || ''}","${r.nombre_puesto || ''}",${r.salario_base},${r.salario_neto},"${r.estado_pago}","${r.fecha_generacion}"\n`;
+      });
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=nomina_${mesActual}_${añoActual}.csv`);
+      return res.send(csv);
+    }
+
     res.json({
       success: true,
-      data: {
-        metadata: {
-          generado: new Date().toISOString(),
-          periodo: `${mesActual}/${añoActual}`,
-          totales
-        },
-        detalle: reporte
-      }
+      data: resultado
     });
 
   } catch (error) {
