@@ -12,6 +12,8 @@ router.use(checkRole(['admin']));
 // CRUD de administradores aprobadores
 router.get('/', administradoresController.getAdministradores);
 router.post('/asignar', administradoresController.asignarAdministrador);
+router.delete('/:id', administradoresController.desactivarAdministrador); // <-- NUEVA
+// O usar: router.put('/:id/toggle', administradoresController.toggleAdministrador);
 
 // Notificaciones
 router.get('/notificaciones/pendientes', administradoresController.getNotificacionesPendientes);

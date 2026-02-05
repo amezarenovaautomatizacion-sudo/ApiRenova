@@ -1,19 +1,46 @@
 const express = require('express');
 const router = express.Router();
 const departamentosController = require('../controllers/departamentos.controller');
-const { verifyToken, checkPermission, checkRole } = require('../middleware/auth.middleware');
+const authMiddleware = require('../middleware/auth.middleware');
 
-// Todas las rutas requieren autenticación
-router.use(verifyToken);
+// Obtener todos los departamentos
+router.get('/', authMiddleware.verifyToken, departamentosController.getAllDepartamentos);
 
-// Solo administradores pueden gestionar departamentos
-router.use(checkRole(['admin']));
+// Obtener departamento por ID
+router.get('/:id', authMiddleware.verifyToken, departamentosController.getDepartamentoById);
 
-// CRUD de departamentos
-router.get('/', departamentosController.getAllDepartamentos);
-router.post('/', departamentosController.createDepartamento);
-router.put('/:id', departamentosController.updateDepartamento);
-router.delete('/:id', departamentosController.deleteDepartamento);
-router.post('/asignar-jefe', departamentosController.asignarJefeDepartamento);
+// Crear departamento (solo admin)
+router.post('/', 
+  authMiddleware.verifyToken,
+  authMiddleware.checkRole(['admin']),
+  departamentosController.createDepartamento
+);
+
+// Actualizar departamento (solo admin)
+router.put('/:id', 
+  authMiddleware.verifyToken,
+  authMiddleware.checkRole(['admin']),
+  departamentosController.updateDepartamento
+);
+
+// Eliminar departamento (solo admin)
+router.delete('/:id', 
+  authMiddleware.verifyToken,
+  authMiddleware.checkRole(['admin']),
+  departamentosController.deleteDepartamento
+);
+
+// Asignar jefe de departamento (solo admin)
+router.post('/asignar-jefe', 
+  authMiddleware.verifyToken,
+  authMiddleware.checkRole(['admin']),
+  departamentosController.asignarJefeDepartamento
+);
+
+// Obtener empleados por departamento
+router.get('/:id/empleados', 
+  authMiddleware.verifyToken,
+  departamentosController.getEmpleadosByDepartamento
+);
 
 module.exports = router;

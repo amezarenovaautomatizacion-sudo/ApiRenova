@@ -233,3 +233,96 @@ exports.asignarJefeDepartamento = async (req, res) => {
     });
   }
 };
+
+exports.getDepartamentoById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [departamento] = await query(`
+      SELECT 
+        d.*,
+        CONCAT(e.nombre, ' ', e.apellido) as nombre_jefe,
+        e.id_empleado as id_jefe_departamento,
+        e.email as email_jefe,
+        (SELECT COUNT(*) FROM empleados emp 
+         WHERE emp.id_departamento = d.id_departamento AND emp.activo = 1) as total_empleados
+      FROM departamentos d
+      LEFT JOIN empleados e ON d.id_jefe_departamento = e.id_empleado
+      WHERE d.id_departamento = ?
+    `, [id]);
+
+    if (!departamento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Departamento no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: departamento
+    });
+  } catch (error) {
+    console.error('Error obteniendo departamento:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener empleados por departamento (NUEVA FUNCIÓN)
+exports.getEmpleadosByDepartamento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verificar si el departamento existe
+    const [departamento] = await query(
+      'SELECT id_departamento FROM departamentos WHERE id_departamento = ?',
+      [id]
+    );
+
+    if (!departamento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Departamento no encontrado'
+      });
+    }
+    
+    const empleados = await query(`
+      SELECT 
+        e.id_empleado,
+        e.nombre,
+        e.apellido,
+        e.identificacion,
+        e.telefono,
+        e.celular,
+        e.correo_personal,
+        p.nombre_puesto,
+        p.nivel,
+        e.salario_base,
+        e.fecha_contratacion,
+        e.activo,
+        CONCAT(j.nombre, ' ', j.apellido) as nombre_jefe
+      FROM empleados e
+      LEFT JOIN puestos p ON e.id_puesto = p.id_puesto
+      LEFT JOIN empleados j ON e.id_jefe = j.id_empleado
+      WHERE e.id_departamento = ? AND e.activo = 1
+      ORDER BY e.nombre, e.apellido
+    `, [id]);
+    
+    res.json({
+      success: true,
+      data: {
+        departamento,
+        empleados
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo empleados por departamento:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};

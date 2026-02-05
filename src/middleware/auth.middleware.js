@@ -67,30 +67,36 @@ const checkRole = (rolesPermitidos) => {
     try {
       const userId = req.userId;
       
+      // Consultar roles del usuario
       const sql = `
-        SELECT r.nombre_rol
-        FROM usuarios u
-        JOIN usuarios_roles ur ON u.id_usuario = ur.id_usuario
+        SELECT r.nombre_rol 
+        FROM usuarios_roles ur
         JOIN roles r ON ur.id_rol = r.id_rol
-        WHERE u.id_usuario = ?
+        WHERE ur.id_usuario = ?
       `;
       
-      const userRoles = await query(sql, [userId]);
+      const results = await query(sql, [userId]);
       
-      const tieneRol = userRoles.some(rol => 
-        rolesPermitidos.includes(rol.nombre_rol)
-      );
-      
-      if (!tieneRol) {
+      if (results.length === 0) {
         return res.status(403).json({
           success: false,
-          message: 'No tiene los permisos necesarios'
+          message: 'Usuario sin roles asignados'
+        });
+      }
+      
+      const userRoles = results.map(r => r.nombre_rol);
+      const tienePermiso = rolesPermitidos.some(rol => userRoles.includes(rol));
+      
+      if (!tienePermiso) {
+        return res.status(403).json({
+          success: false,
+          message: `No tiene permiso. Se requiere uno de estos roles: ${rolesPermitidos.join(', ')}`
         });
       }
       
       next();
     } catch (error) {
-      console.error('Error verificando rol:', error);
+      console.error('Error verificando roles:', error);
       res.status(500).json({
         success: false,
         message: 'Error interno del servidor'

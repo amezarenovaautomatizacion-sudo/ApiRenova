@@ -39,7 +39,14 @@ app.get('/', (req, res) => {
       asistencias: '/api/asistencias',
       proyectos: '/api/proyectos',
       reportes: '/api/reportes',
-      dashboard: '/api/dashboard'
+      dashboard: '/api/dashboard',
+      administradores: '/api/administradores',
+      departamentos: '/api/departamentos',
+      puestos: '/api/puestos', // <-- Asegúrate de que esté aquí
+      jefes: '/api/jefes',
+      permisos: '/api/permisos',
+      horas_extras: '/api/horas-extras',
+      vigencias: '/api/vigencias'
     }
   });
 });

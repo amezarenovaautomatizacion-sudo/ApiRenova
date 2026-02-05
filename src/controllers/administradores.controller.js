@@ -253,3 +253,140 @@ exports.getNotificacionesPendientes = async (req, res) => {
     });
   }
 };
+
+// Desactivar administrador aprobador
+exports.desactivarAdministrador = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+
+    // Verificar permisos (solo admin puede desactivar)
+    const [usuario] = await query(
+      `SELECT ur.id_rol 
+       FROM usuarios_roles ur 
+       JOIN roles r ON ur.id_rol = r.id_rol 
+       WHERE ur.id_usuario = ? AND r.nombre_rol = 'admin'`,
+      [userId]
+    );
+
+    if (!usuario) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para desactivar administradores'
+      });
+    }
+
+    // Verificar que el administrador existe y está activo
+    const [administrador] = await query(
+      'SELECT id_admin_aprobador, nivel FROM administradores_aprobadores WHERE id_admin_aprobador = ? AND activo = 1',
+      [id]
+    );
+
+    if (!administrador) {
+      return res.status(404).json({
+        success: false,
+        message: 'Administrador no encontrado o ya está inactivo'
+      });
+    }
+
+    // Verificar que no sea el último administrador de un nivel
+    const [mismoNivel] = await query(
+      'SELECT id_admin_aprobador FROM administradores_aprobadores WHERE nivel = ? AND activo = 1 AND id_admin_aprobador != ?',
+      [administrador.nivel, id]
+    );
+
+    if (!mismoNivel) {
+      // Este es el único administrador en este nivel
+      // Podrías requerir asignar un reemplazo primero
+      return res.status(400).json({
+        success: false,
+        message: `No se puede desactivar. No hay otro administrador en el nivel ${administrador.nivel}. Asigna un reemplazo primero.`
+      });
+    }
+
+    // Desactivar administrador
+    await query(
+      'UPDATE administradores_aprobadores SET activo = 0, fecha_desactivacion = NOW() WHERE id_admin_aprobador = ?',
+      [id]
+    );
+
+    // Registrar en historial
+    await query(
+      `INSERT INTO historial_administradores 
+       (id_admin_aprobador, accion, id_usuario_accion, fecha_accion)
+       VALUES (?, 'desactivar', ?, NOW())`,
+      [id, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Administrador desactivado exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error desactivando administrador:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Otra opción: Alternar entre activar/desactivar
+exports.toggleAdministrador = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { activo } = req.body; // true/false
+
+    // Verificar que existe
+    const [administrador] = await query(
+      'SELECT id_admin_aprobador FROM administradores_aprobadores WHERE id_admin_aprobador = ?',
+      [id]
+    );
+
+    if (!administrador) {
+      return res.status(404).json({
+        success: false,
+        message: 'Administrador no encontrado'
+      });
+    }
+
+    // Validar que hay otros administradores en el mismo nivel si se desactiva
+    if (activo === false || activo === 0) {
+      const [adminInfo] = await query(
+        'SELECT nivel FROM administradores_aprobadores WHERE id_admin_aprobador = ?',
+        [id]
+      );
+
+      const [otrosEnNivel] = await query(
+        'SELECT id_admin_aprobador FROM administradores_aprobadores WHERE nivel = ? AND activo = 1 AND id_admin_aprobador != ?',
+        [adminInfo.nivel, id]
+      );
+
+      if (!otrosEnNivel) {
+        return res.status(400).json({
+          success: false,
+          message: `No se puede desactivar. Es el único administrador en el nivel ${adminInfo.nivel}`
+        });
+      }
+    }
+
+    // Actualizar estado
+    await query(
+      'UPDATE administradores_aprobadores SET activo = ?, fecha_desactivacion = CASE WHEN ? = 0 THEN NOW() ELSE NULL END WHERE id_admin_aprobador = ?',
+      [activo ? 1 : 0, activo ? 0 : 1, id]
+    );
+
+    res.json({
+      success: true,
+      message: `Administrador ${activo ? 'activado' : 'desactivado'} exitosamente`
+    });
+
+  } catch (error) {
+    console.error('Error cambiando estado del administrador:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
