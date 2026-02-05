@@ -3,7 +3,6 @@ const { query } = require('../config/db');
 // Obtener todos los empleados (con paginación y filtros)
 exports.getAllEmpleados = async (req, res) => {
   try {
-    // Obtener query params y asegurar que sean números donde corresponde
     const page = parseInt(req.query.page ?? '1', 10);
     const limit = parseInt(req.query.limit ?? '10', 10);
     const offset = (page - 1) * limit;
@@ -12,7 +11,6 @@ exports.getAllEmpleados = async (req, res) => {
     const puesto = req.query.puesto;
     const activo = parseInt(req.query.activo ?? '1', 10);
 
-    // Construir consulta base
     let baseQuery = `
       FROM empleados e
       LEFT JOIN departamentos d ON e.id_departamento = d.id_departamento
@@ -21,10 +19,9 @@ exports.getAllEmpleados = async (req, res) => {
       LEFT JOIN empleados j ON e.id_jefe = j.id_empleado
       WHERE e.activo = ?
     `;
-    
+
     const params = [activo];
 
-    // Filtro de búsqueda
     if (search) {
       baseQuery += ` AND (
         e.nombre LIKE ? OR
@@ -32,28 +29,24 @@ exports.getAllEmpleados = async (req, res) => {
         e.identificacion LIKE ? OR
         u.email LIKE ?
       )`;
-      const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+      const term = `%${search}%`;
+      params.push(term, term, term, term);
     }
 
-    // Filtro por departamento
     if (departamento) {
       baseQuery += ` AND e.id_departamento = ?`;
       params.push(departamento);
     }
 
-    // Filtro por puesto
     if (puesto) {
       baseQuery += ` AND e.id_puesto = ?`;
       params.push(puesto);
     }
 
-    // --- Conteo total ---
     const countQuery = `SELECT COUNT(*) as total ${baseQuery}`;
     const countResult = await query(countQuery, params);
     const total = countResult[0]?.total ?? 0;
 
-    // --- Obtener datos ---
     const dataQuery = `
       SELECT
         e.*,
@@ -62,16 +55,14 @@ exports.getAllEmpleados = async (req, res) => {
         p.nivel,
         u.email,
         u.ultimo_login,
-        CONCAT(j.nombre, ' ', j.apellido) as nombre_jefe
+        CONCAT(j.nombre, ' ', j.apellido) AS nombre_jefe
       ${baseQuery}
       ORDER BY e.fecha_contratacion DESC
       LIMIT ? OFFSET ?
     `;
-    
-    const dataParams = [...params, limit, offset];
-    const empleados = await query(dataQuery, dataParams);
 
-    // Responder
+    const empleados = await query(dataQuery, [...params, limit, offset]);
+
     res.json({
       success: true,
       data: {
@@ -108,8 +99,8 @@ exports.getEmpleadoById = async (req, res) => {
         u.email,
         u.ultimo_login,
         u.fecha_creacion,
-        CONCAT(j.nombre, ' ', j.apellido) as nombre_jefe,
-        j.id_empleado as id_jefe
+        CONCAT(j.nombre, ' ', j.apellido) AS nombre_jefe,
+        j.id_empleado AS id_jefe
       FROM empleados e
       LEFT JOIN departamentos d ON e.id_departamento = d.id_departamento
       LEFT JOIN puestos p ON e.id_puesto = p.id_puesto
@@ -120,25 +111,23 @@ exports.getEmpleadoById = async (req, res) => {
     );
 
     if (empleados.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Empleado no encontrado' 
+        message: 'Empleado no encontrado'
       });
     }
 
-    // Obtener proyectos activos del empleado
     const proyectos = await query(
       `SELECT 
         ap.*,
         p.nombre_proyecto,
-        p.estado as estado_proyecto
+        p.estado AS estado_proyecto
       FROM asignaciones_proyecto ap
       JOIN proyectos p ON ap.id_proyecto = p.id_proyecto
       WHERE ap.id_empleado = ? AND ap.activo = 1`,
       [id]
     );
 
-    // Obtener vacaciones recientes
     const vacaciones = await query(
       `SELECT 
         v.*,
@@ -153,14 +142,13 @@ exports.getEmpleadoById = async (req, res) => {
       [id]
     );
 
-    // Obtener asistencias del mes actual
     const asistencias = await query(
       `SELECT 
         fecha,
         estado,
         horas_trabajadas
-      FROM asistencias 
-      WHERE id_empleado = ? 
+      FROM asistencias
+      WHERE id_empleado = ?
         AND YEAR(fecha) = YEAR(CURRENT_DATE)
         AND MONTH(fecha) = MONTH(CURRENT_DATE)
       ORDER BY fecha DESC`,
@@ -179,14 +167,14 @@ exports.getEmpleadoById = async (req, res) => {
 
   } catch (error) {
     console.error('Error obteniendo empleado:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error interno del servidor' 
+      message: 'Error interno del servidor'
     });
   }
 };
 
-// Crear nuevo empleado
+// Crear nuevo empleado (con nuevos campos)
 exports.createEmpleado = async (req, res) => {
   try {
     const {
@@ -201,52 +189,77 @@ exports.createEmpleado = async (req, res) => {
       direccion,
       fecha_contratacion,
       fecha_nacimiento,
-      salario_base
+      salario_base,
+      // Nuevos campos
+      celular,
+      correo_personal,
+      direccion_completa,
+      nss,
+      rfc,
+      curp,
+      telefono_emergencia,
+      contacto_emergencia,
+      parentesco_emergencia
     } = req.body;
 
-    // Validaciones básicas
     if (!nombre || !apellido || !identificacion || !fecha_contratacion || !fecha_nacimiento) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Faltan campos requeridos' 
+        message: 'Faltan campos requeridos'
       });
     }
 
-    // Verificar si la identificación ya existe
     const existente = await query(
       'SELECT id_empleado FROM empleados WHERE identificacion = ?',
       [identificacion]
     );
 
     if (existente.length > 0) {
-      return res.status(409).json({ 
+      return res.status(409).json({
         success: false,
-        message: 'La identificación ya está registrada' 
+        message: 'La identificación ya está registrada'
       });
     }
 
-    // Verificar si el usuario ya tiene empleado
-    if (id_usuario) {
-      const usuarioEmpleado = await query(
-        'SELECT id_empleado FROM empleados WHERE id_usuario = ?',
-        [id_usuario]
+    if (nss) {
+      const nssExistente = await query(
+        'SELECT id_empleado FROM empleados WHERE nss = ?',
+        [nss]
       );
-
-      if (usuarioEmpleado.length > 0) {
-        return res.status(409).json({ 
-          success: false,
-          message: 'El usuario ya tiene un empleado asociado' 
-        });
+      if (nssExistente.length > 0) {
+        return res.status(409).json({ success: false, message: 'El NSS ya está registrado' });
       }
     }
 
-    // Insertar empleado
+    if (rfc) {
+      const rfcExistente = await query(
+        'SELECT id_empleado FROM empleados WHERE rfc = ?',
+        [rfc]
+      );
+      if (rfcExistente.length > 0) {
+        return res.status(409).json({ success: false, message: 'El RFC ya está registrado' });
+      }
+    }
+
+    if (curp) {
+      const curpExistente = await query(
+        'SELECT id_empleado FROM empleados WHERE curp = ?',
+        [curp]
+      );
+      if (curpExistente.length > 0) {
+        return res.status(409).json({ success: false, message: 'La CURP ya está registrada' });
+      }
+    }
+
     const result = await query(
       `INSERT INTO empleados (
         id_usuario, id_departamento, id_puesto, id_jefe,
         nombre, apellido, identificacion, telefono,
-        direccion, fecha_contratacion, fecha_nacimiento, salario_base
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        direccion, fecha_contratacion, fecha_nacimiento, salario_base,
+        celular, correo_personal, direccion_completa, nss,
+        rfc, curp, telefono_emergencia, contacto_emergencia,
+        parentesco_emergencia
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id_usuario || null,
         id_departamento || null,
@@ -259,32 +272,30 @@ exports.createEmpleado = async (req, res) => {
         direccion || null,
         fecha_contratacion,
         fecha_nacimiento,
-        salario_base || 0
+        salario_base || 0,
+        celular || null,
+        correo_personal || null,
+        direccion_completa || null,
+        nss || null,
+        rfc || null,
+        curp || null,
+        telefono_emergencia || null,
+        contacto_emergencia || null,
+        parentesco_emergencia || null
       ]
     );
 
     res.status(201).json({
       success: true,
       message: 'Empleado creado exitosamente',
-      data: {
-        id_empleado: result.insertId
-      }
+      data: { id_empleado: result.insertId }
     });
 
   } catch (error) {
     console.error('Error creando empleado:', error);
-    
-    // Manejar errores específicos de MySQL
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Referencia inválida (departamento, puesto o jefe no existe)' 
-      });
-    }
-    
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error interno del servidor' 
+      message: 'Error interno del servidor'
     });
   }
 };
@@ -295,24 +306,24 @@ exports.updateEmpleado = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    // Verificar si el empleado existe
     const empleados = await query(
       'SELECT id_empleado FROM empleados WHERE id_empleado = ?',
       [id]
     );
 
     if (empleados.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Empleado no encontrado' 
+        message: 'Empleado no encontrado'
       });
     }
 
-    // Construir SET dinámico
     const allowedFields = [
       'id_departamento', 'id_puesto', 'id_jefe', 'nombre', 'apellido',
       'telefono', 'direccion', 'fecha_contratacion', 'fecha_nacimiento',
-      'salario_base', 'activo'
+      'salario_base', 'activo', 'celular', 'correo_personal',
+      'direccion_completa', 'nss', 'rfc', 'curp',
+      'telefono_emergencia', 'contacto_emergencia', 'parentesco_emergencia'
     ];
 
     const setClauses = [];
@@ -326,31 +337,15 @@ exports.updateEmpleado = async (req, res) => {
     }
 
     if (setClauses.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'No hay datos para actualizar' 
+        message: 'No hay datos para actualizar'
       });
     }
 
-    // No permitir cambiar la identificación
-    if (updateData.identificacion) {
-      const existente = await query(
-        'SELECT id_empleado FROM empleados WHERE identificacion = ? AND id_empleado != ?',
-        [updateData.identificacion, id]
-      );
-
-      if (existente.length > 0) {
-        return res.status(409).json({ 
-          success: false,
-          message: 'La identificación ya está en uso por otro empleado' 
-        });
-      }
-    }
-
     values.push(id);
-    
+
     const sql = `UPDATE empleados SET ${setClauses.join(', ')} WHERE id_empleado = ?`;
-    
     await query(sql, values);
 
     res.json({
@@ -360,9 +355,9 @@ exports.updateEmpleado = async (req, res) => {
 
   } catch (error) {
     console.error('Error actualizando empleado:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error interno del servidor' 
+      message: 'Error interno del servidor'
     });
   }
 };
@@ -372,30 +367,8 @@ exports.deleteEmpleado = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Verificar si el empleado existe
-    const empleados = await query(
-      'SELECT id_empleado FROM empleados WHERE id_empleado = ?',
-      [id]
-    );
-
-    if (empleados.length === 0) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Empleado no encontrado' 
-      });
-    }
-
-    // Soft delete: marcar como inactivo
-    await query(
-      'UPDATE empleados SET activo = 0 WHERE id_empleado = ?',
-      [id]
-    );
-
-    // También desactivar asignaciones de proyectos
-    await query(
-      'UPDATE asignaciones_proyecto SET activo = 0 WHERE id_empleado = ?',
-      [id]
-    );
+    await query('UPDATE empleados SET activo = 0 WHERE id_empleado = ?', [id]);
+    await query('UPDATE asignaciones_proyecto SET activo = 0 WHERE id_empleado = ?', [id]);
 
     res.json({
       success: true,
@@ -404,58 +377,32 @@ exports.deleteEmpleado = async (req, res) => {
 
   } catch (error) {
     console.error('Error eliminando empleado:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error interno del servidor' 
+      message: 'Error interno del servidor'
     });
   }
 };
 
-// Obtener estadísticas de empleados
+// Obtener estadísticas
 exports.getEstadisticas = async (req, res) => {
   try {
-    // Total empleados activos
     const [totalActivos] = await query(
-      'SELECT COUNT(*) as total FROM empleados WHERE activo = 1'
+      'SELECT COUNT(*) AS total FROM empleados WHERE activo = 1'
     );
 
-    // Empleados por departamento
     const porDepartamento = await query(
-      `SELECT 
-        d.nombre_departamento,
-        COUNT(e.id_empleado) as cantidad
-      FROM departamentos d
-      LEFT JOIN empleados e ON d.id_departamento = e.id_departamento AND e.activo = 1
-      GROUP BY d.id_departamento
-      ORDER BY cantidad DESC`
+      `SELECT d.nombre_departamento, COUNT(e.id_empleado) AS cantidad
+       FROM departamentos d
+       LEFT JOIN empleados e ON d.id_departamento = e.id_departamento AND e.activo = 1
+       GROUP BY d.id_departamento`
     );
 
-    // Empleados por puesto
     const porPuesto = await query(
-      `SELECT 
-        p.nombre_puesto,
-        p.nivel,
-        COUNT(e.id_empleado) as cantidad
-      FROM puestos p
-      LEFT JOIN empleados e ON p.id_puesto = e.id_puesto AND e.activo = 1
-      GROUP BY p.id_puesto
-      ORDER BY cantidad DESC`
-    );
-
-    // Últimas contrataciones
-    const ultimasContrataciones = await query(
-      `SELECT 
-        e.nombre,
-        e.apellido,
-        e.fecha_contratacion,
-        d.nombre_departamento,
-        p.nombre_puesto
-      FROM empleados e
-      LEFT JOIN departamentos d ON e.id_departamento = d.id_departamento
-      LEFT JOIN puestos p ON e.id_puesto = p.id_puesto
-      WHERE e.activo = 1
-      ORDER BY e.fecha_contratacion DESC
-      LIMIT 5`
+      `SELECT p.nombre_puesto, p.nivel, COUNT(e.id_empleado) AS cantidad
+       FROM puestos p
+       LEFT JOIN empleados e ON p.id_puesto = e.id_puesto AND e.activo = 1
+       GROUP BY p.id_puesto`
     );
 
     res.json({
@@ -463,16 +410,15 @@ exports.getEstadisticas = async (req, res) => {
       data: {
         totalActivos: totalActivos.total,
         porDepartamento,
-        porPuesto,
-        ultimasContrataciones
+        porPuesto
       }
     });
 
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Error interno del servidor' 
+      message: 'Error interno del servidor'
     });
   }
 };

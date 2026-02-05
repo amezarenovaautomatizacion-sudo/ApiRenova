@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+require('dotenv').config();
 const app = express();
 
 // Configuración de seguridad
@@ -100,5 +101,10 @@ app.use((err, req, res, next) => {
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
+
+if (process.env.NODE_ENV === 'production') {
+  require('./utils/cronJobs');
+  console.log('Tareas programadas iniciadas');
+}
 
 module.exports = app;
