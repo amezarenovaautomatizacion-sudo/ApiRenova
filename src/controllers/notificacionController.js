@@ -261,7 +261,7 @@ obtenerMisNotificaciones: async (req, res, next) => {
       const notificacionData = {
         titulo,
         mensaje,
-        tipoNotificacionId: tipoNotificacionId || 15, // notificacion_general por defecto
+        tipoNotificacionId: tipoNotificacionId || 15,
         importante,
         vigenciaDias,
         datosExtra,
@@ -274,6 +274,68 @@ obtenerMisNotificaciones: async (req, res, next) => {
         success: true,
         message: 'Notificación general creada exitosamente',
         data: resultado
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  },
+
+    crearNotificacionPersonal: async (req, res, next) => {
+    try {
+      const { usuarioId, titulo, mensaje, tipoNotificacionId = 1, vigenciaDias = 30 } = req.body;
+      
+      if (!usuarioId || !titulo || !mensaje) {
+        return res.status(400).json({
+          success: false,
+          message: 'usuarioId, título y mensaje son requeridos'
+        });
+      }
+
+      const resultado = await Notificacion.crearNotificacionPersonal({
+        usuarioId,
+        tipoNotificacionId,
+        titulo,
+        mensaje,
+        vigenciaDias
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Notificación personal creada',
+        data: resultado
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  },
+
+    obtenerUltimaNotificacion: async (req, res, next) => {
+    try {
+      const usuarioId = req.user.id;
+      
+      const [notificaciones] = await pool.query(`
+        SELECT 
+          np.ID,
+          np.Titulo,
+          np.Mensaje,
+          np.createdAt,
+          tn.Nombre as Tipo,
+          tn.Prioridad
+        FROM notificaciones_personales np
+        JOIN tipos_notificacion tn ON np.TipoNotificacionID = tn.ID
+        WHERE np.UsuarioID = ? 
+          AND np.Estado = 'no_vista'
+          AND np.Activo = 1
+          AND np.FechaExpiracion > NOW()
+        ORDER BY np.createdAt DESC
+        LIMIT 1
+      `, [usuarioId]);
+
+      res.status(200).json({
+        success: true,
+        data: notificaciones[0] || null
       });
 
     } catch (error) {

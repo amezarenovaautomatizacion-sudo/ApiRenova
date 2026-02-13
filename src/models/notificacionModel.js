@@ -1,4 +1,8 @@
 const { pool } = require('../config/database');
+const { 
+  emitirNotificacionGeneral,
+  emitirNotificacionImportante 
+} = require('../sockets/notificacionSocket');
 
 const Notificacion = {
   // Obtener notificaciones personales con filtros
@@ -306,7 +310,7 @@ obtenerNotificacionesGenerales: async (filtros) => {
   },
 
   // Crear notificación general
-  crearNotificacionGeneral: async (notificacionData) => {
+ crearNotificacionGeneral: async (notificacionData) => {
     const connection = await pool.getConnection();
     
     try {
@@ -329,14 +333,35 @@ obtenerNotificacionesGenerales: async (filtros) => {
 
       const notificacionId = result.insertId;
 
-      // Obtener notificación creada
+      // Obtener notificación creada con detalles
       const [rows] = await connection.query(`
-        SELECT * FROM notificaciones_generales WHERE ID = ?
+        SELECT 
+          ng.*,
+          tn.Nombre as Tipo,
+          tn.Prioridad,
+          tn.Icono,
+          tn.Color,
+          COALESCE(e.NombreCompleto, 'Sistema') as CreadorNombre
+        FROM notificaciones_generales ng
+        LEFT JOIN tipos_notificacion tn ON ng.TipoNotificacionID = tn.ID
+        LEFT JOIN empleados e ON e.UsuarioID = ng.CreadoPor
+        WHERE ng.ID = ?
       `, [notificacionId]);
 
       await connection.commit();
 
-      return rows[0];
+      // 👇 EMITIR NOTIFICACIÓN EN TIEMPO REAL
+      const notificacion = rows[0];
+      
+      if (notificacion.Importante) {
+        // Si es importante, emitir con prioridad
+        await emitirNotificacionImportante(notificacion);
+      } else {
+        // Notificación general normal
+        await emitirNotificacionGeneral(notificacion);
+      }
+
+      return notificacion;
 
     } catch (error) {
       await connection.rollback();
@@ -344,6 +369,39 @@ obtenerNotificacionesGenerales: async (filtros) => {
     } finally {
       connection.release();
     }
+  },
+
+   crearNotificacionPersonal: async (data) => {
+    const { usuarioId, tipoNotificacionId, titulo, mensaje, datosExtra, vigenciaDias = 30 } = data;
+    
+    const [result] = await pool.query(`
+      INSERT INTO notificaciones_personales 
+      (UsuarioID, TipoNotificacionID, Titulo, Mensaje, DatosExtra, VigenciaDias, FechaExpiracion)
+      VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))
+    `, [usuarioId, tipoNotificacionId, titulo, mensaje, 
+        datosExtra ? JSON.stringify(datosExtra) : null, vigenciaDias, vigenciaDias]);
+
+    const [notificacion] = await pool.query(`
+      SELECT 
+        np.*,
+        tn.Nombre as Tipo,
+        tn.Prioridad,
+        tn.Icono,
+        tn.Color,
+        u.Usuario,
+        e.NombreCompleto as NombreEmpleado
+      FROM notificaciones_personales np
+      JOIN tipos_notificacion tn ON np.TipoNotificacionID = tn.ID
+      JOIN usuarios u ON np.UsuarioID = u.ID
+      LEFT JOIN empleados e ON e.UsuarioID = u.ID
+      WHERE np.ID = ?
+    `, [result.insertId]);
+
+    // Emitir al usuario específico
+    const { emitirNotificacionPersonal } = require('../sockets/notificacionSocket');
+    await emitirNotificacionPersonal(usuarioId, notificacion[0]);
+
+    return notificacion[0];
   },
 
   // Obtener tipos de notificación
