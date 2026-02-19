@@ -86,7 +86,7 @@ router.get(
       const [rows] = await req.app.locals.db.query(
         `
         SELECT NSS, RFC, CURP, Direccion, FechaNacimiento
-        FROM Empleados
+        FROM empleados
         WHERE ID = ?
         `,
         [id]
@@ -134,8 +134,8 @@ router.get(
       const [rows] = await req.app.locals.db.query(
         `
         SELECT e.ID, e.NombreCompleto, e.NSS, e.RFC, e.CURP, e.CorreoElectronico
-        FROM Empleados e
-        JOIN Usuarios u ON e.UsuarioID = u.ID
+        FROM empleados e
+        JOIN usuarios u ON e.UsuarioID = u.ID
         WHERE u.Activo = TRUE
         ORDER BY e.NombreCompleto
         LIMIT ? OFFSET ?
@@ -146,8 +146,8 @@ router.get(
       const [countResult] = await req.app.locals.db.query(
         `
         SELECT COUNT(*) AS total
-        FROM Empleados e
-        JOIN Usuarios u ON e.UsuarioID = u.ID
+        FROM empleados e
+        JOIN usuarios u ON e.UsuarioID = u.ID
         WHERE u.Activo = TRUE
         `
       );

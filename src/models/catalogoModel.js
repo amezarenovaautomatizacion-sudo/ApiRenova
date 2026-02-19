@@ -5,7 +5,7 @@ const Catalogo = {
   getPuestos: async () => {
     try {
       const [rows] = await pool.query(
-        'SELECT * FROM Puestos WHERE Activo = TRUE ORDER BY Nombre'
+        'SELECT * FROM puestos WHERE Activo = TRUE ORDER BY Nombre'
       );
       return rows;
     } catch (error) {
@@ -16,7 +16,7 @@ const Catalogo = {
   createPuesto: async (nombre, descripcion) => {
     try {
       const [result] = await pool.query(
-        'INSERT INTO Puestos (Nombre, Descripcion) VALUES (?, ?)',
+        'INSERT INTO puestos (Nombre, Descripcion) VALUES (?, ?)',
         [nombre, descripcion]
       );
       return { id: result.insertId, nombre, descripcion };
@@ -29,7 +29,7 @@ const Catalogo = {
   getDepartamentos: async () => {
     try {
       const [rows] = await pool.query(
-        'SELECT * FROM Departamentos WHERE Activo = TRUE ORDER BY Nombre'
+        'SELECT * FROM departamentos WHERE Activo = TRUE ORDER BY Nombre'
       );
       return rows;
     } catch (error) {
@@ -40,7 +40,7 @@ const Catalogo = {
   createDepartamento: async (nombre, descripcion) => {
     try {
       const [result] = await pool.query(
-        'INSERT INTO Departamentos (Nombre, Descripcion) VALUES (?, ?)',
+        'INSERT INTO departamentos (Nombre, Descripcion) VALUES (?, ?)',
         [nombre, descripcion]
       );
       return { id: result.insertId, nombre, descripcion };
@@ -54,8 +54,8 @@ const Catalogo = {
     try {
       const [rows] = await pool.query(
         `SELECT e.ID, e.NombreCompleto, e.CorreoElectronico, e.RolApp 
-         FROM Empleados e
-         JOIN Usuarios u ON e.UsuarioID = u.ID
+         FROM empleados e
+         JOIN usuarios u ON e.UsuarioID = u.ID
          WHERE u.Activo = TRUE
          ORDER BY e.NombreCompleto`
       );

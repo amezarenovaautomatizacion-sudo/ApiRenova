@@ -5,8 +5,8 @@ const User = {
     try {
       const [rows] = await pool.query(
         `SELECT u.*, r.Nombre as RolNombre, r.Nivel as RolNivel
-         FROM Usuarios u
-         LEFT JOIN Roles r ON u.RolID = r.ID
+         FROM usuarios u
+         LEFT JOIN roles r ON u.RolID = r.ID
          WHERE u.Usuario = ? AND u.Activo = TRUE`,
         [email]
       );
@@ -21,8 +21,8 @@ const User = {
       const [rows] = await pool.query(
         `SELECT u.ID, u.Usuario, u.Rol, u.RolID, u.Activo, u.createdAt,
                 r.Nombre as RolNombre, r.Nivel as RolNivel, r.Descripcion as RolDescripcion
-         FROM Usuarios u
-         LEFT JOIN Roles r ON u.RolID = r.ID
+         FROM usuarios u
+         LEFT JOIN roles r ON u.RolID = r.ID
          WHERE u.ID = ? AND u.Activo = TRUE`,
         [id]
       );
@@ -35,11 +35,11 @@ const User = {
   create: async (usuario, contrasenia, rolId) => {
     try {
       // Obtener nombre del rol
-      const [rol] = await pool.query('SELECT Nombre FROM Roles WHERE ID = ?', [rolId]);
+      const [rol] = await pool.query('SELECT Nombre FROM roles WHERE ID = ?', [rolId]);
       const rolNombre = rol[0]?.Nombre || 'employee';
 
       const [result] = await pool.query(
-        'INSERT INTO Usuarios (Usuario, Contrasenia, Rol, RolID) VALUES (?, ?, ?, ?)',
+        'INSERT INTO usuarios (Usuario, Contrasenia, Rol, RolID) VALUES (?, ?, ?, ?)',
         [usuario, contrasenia, rolNombre, rolId]
       );
       return { 
@@ -56,11 +56,11 @@ const User = {
   updateRol: async (id, rolId) => {
     try {
       // Obtener nombre del rol
-      const [rol] = await pool.query('SELECT Nombre FROM Roles WHERE ID = ?', [rolId]);
+      const [rol] = await pool.query('SELECT Nombre FROM roles WHERE ID = ?', [rolId]);
       const rolNombre = rol[0]?.Nombre || 'employee';
 
       const [result] = await pool.query(
-        'UPDATE Usuarios SET Rol = ?, RolID = ? WHERE ID = ?',
+        'UPDATE usuarios SET Rol = ?, RolID = ? WHERE ID = ?',
         [rolNombre, rolId, id]
       );
       return result.affectedRows > 0;

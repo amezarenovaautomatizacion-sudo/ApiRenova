@@ -19,7 +19,7 @@ const HorasExtras = {
 
       // Crear solicitud
       const [solicitudResult] = await connection.query(
-        `INSERT INTO Solicitudes 
+        `INSERT INTO solicitudes 
          (EmpleadoID, Tipo, Estado, Motivo, FechaSolicitud, 
           FechaInicio, HorasSolicitadas, Observaciones) 
          VALUES (?, 'horas_extras', 'pendiente', ?, CURDATE(), ?, ?, ?)`,
@@ -37,8 +37,8 @@ const HorasExtras = {
       // Crear aprobaciones para los 3 aprobadores
       const [aprobadores] = await connection.query(
         `SELECT u.ID as UsuarioID, a.ID as AprobadorID
-         FROM Aprobadores a
-         JOIN Usuarios u ON a.UsuarioID = u.ID
+         FROM aprobadores a
+         JOIN usuarios u ON a.UsuarioID = u.ID
          WHERE a.Activo = TRUE
          ORDER BY a.createdAt
          LIMIT 3`
@@ -46,7 +46,7 @@ const HorasExtras = {
 
       for (let i = 0; i < aprobadores.length; i++) {
         await connection.query(
-          `INSERT INTO AprobacionesSolicitud 
+          `INSERT INTO aprobacionessolicitud 
            (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
            VALUES (?, ?, ?, 'pendiente')`,
           [solicitudId, aprobadores[i].UsuarioID, i + 1]
@@ -55,7 +55,7 @@ const HorasExtras = {
 
       // Registrar en historial
       await connection.query(
-        `INSERT INTO HistorialSolicitud 
+        `INSERT INTO historialsolicitud 
          (SolicitudID, UsuarioID, Accion, EstadoNuevo, Comentarios) 
          VALUES (?, ?, 'solicitud_creada', 'pendiente', 'Solicitud de horas extras creada')`,
         [solicitudId, solicitudData.creadoPor]
@@ -89,10 +89,10 @@ const HorasExtras = {
           p.Nombre as PuestoNombre,
           SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
           SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos
-        FROM Solicitudes s
-        JOIN Empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN Puestos p ON e.PuestoID = p.ID
-        LEFT JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+        FROM solicitudes s
+        JOIN empleados e ON s.EmpleadoID = e.ID
+        LEFT JOIN puestos p ON e.PuestoID = p.ID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
         WHERE s.Tipo = 'horas_extras' AND s.Activo = TRUE
       `;
       

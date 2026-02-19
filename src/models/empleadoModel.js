@@ -9,7 +9,7 @@ const Empleado = {
 
       // Obtener RolID del rolApp
       const [rolResult] = await connection.query(
-        'SELECT ID FROM Roles WHERE Nombre = ?',
+        'SELECT ID FROM roles WHERE Nombre = ?',
         [empleadoData.rolApp]
       );
       
@@ -21,7 +21,7 @@ const Empleado = {
 
       // 1. Primero crear el usuario con RolID
       const [userResult] = await connection.query(
-        'INSERT INTO Usuarios (Usuario, Contrasenia, Rol, RolID) VALUES (?, ?, ?, ?)',
+        'INSERT INTO usuarios (Usuario, Contrasenia, Rol, RolID) VALUES (?, ?, ?, ?)',
         [empleadoData.correoElectronico, empleadoData.contrasenia, empleadoData.rolApp, rolId]
       );
       
@@ -29,7 +29,7 @@ const Empleado = {
 
       // 2. Crear el empleado (resto del código igual)
       const [empleadoResult] = await connection.query(
-        `INSERT INTO Empleados (
+        `INSERT INTO empleados (
           UsuarioID, NombreCompleto, Celular, CorreoElectronico, 
           FechaIngreso, FechaNacimiento, Direccion, NSS, RFC, CURP, 
           TelefonoEmergencia, PuestoID, RolApp
@@ -59,7 +59,7 @@ const Empleado = {
           [empleadoId, deptoId]
         );
         await connection.query(
-          'INSERT INTO EmpleadoDepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
+          'INSERT INTO empleadodepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
           [deptoValues]
         );
       }
@@ -70,7 +70,7 @@ const Empleado = {
           [empleadoId, jefeId]
         );
         await connection.query(
-          'INSERT INTO EmpleadoJefes (EmpleadoID, JefeID) VALUES ?',
+          'INSERT INTO empleadojefes (EmpleadoID, JefeID) VALUES ?',
           [jefeValues]
         );
       }
@@ -102,9 +102,9 @@ const Empleado = {
           p.Nombre as PuestoNombre,
           p.Descripcion as PuestoDescripcion,
           u.Rol as UsuarioRol
-         FROM Empleados e
-         LEFT JOIN Puestos p ON e.PuestoID = p.ID
-         LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+         FROM empleados e
+         LEFT JOIN puestos p ON e.PuestoID = p.ID
+         LEFT JOIN usuarios u ON e.UsuarioID = u.ID
          WHERE e.UsuarioID = ? AND u.Activo = TRUE`,
         [usuarioId]
       );
@@ -123,9 +123,9 @@ const Empleado = {
           p.Nombre as PuestoNombre,
           p.Descripcion as PuestoDescripcion,
           u.Rol as UsuarioRol
-         FROM Empleados e
-         LEFT JOIN Puestos p ON e.PuestoID = p.ID
-         LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+         FROM empleados e
+         LEFT JOIN puestos p ON e.PuestoID = p.ID
+         LEFT JOIN usuarios u ON e.UsuarioID = u.ID
          WHERE e.ID = ? AND u.Activo = TRUE`,
         [id]
       );
@@ -149,9 +149,9 @@ const Empleado = {
           e.FechaIngreso,
           p.Nombre as PuestoNombre,
           u.Activo as UsuarioActivo
-         FROM Empleados e
-         LEFT JOIN Puestos p ON e.PuestoID = p.ID
-         LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+         FROM empleados e
+         LEFT JOIN puestos p ON e.PuestoID = p.ID
+         LEFT JOIN usuarios u ON e.UsuarioID = u.ID
          WHERE u.Activo = TRUE
          ORDER BY e.NombreCompleto
          LIMIT ? OFFSET ?`,
@@ -160,8 +160,8 @@ const Empleado = {
 
       const [countResult] = await pool.query(
         `SELECT COUNT(*) as total 
-         FROM Empleados e
-         LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+         FROM empleados e
+         LEFT JOIN usuarios u ON e.UsuarioID = u.ID
          WHERE u.Activo = TRUE`
       );
 
@@ -185,8 +185,8 @@ const Empleado = {
     try {
       const [rows] = await pool.query(
         `SELECT d.* 
-         FROM Departamentos d
-         JOIN EmpleadoDepartamentos ed ON d.ID = ed.DepartamentoID
+         FROM departamentos d
+         JOIN empleadodepartamentos ed ON d.ID = ed.DepartamentoID
          WHERE ed.EmpleadoID = ? AND d.Activo = TRUE`,
         [empleadoId]
       );
@@ -206,9 +206,9 @@ const Empleado = {
           j.CorreoElectronico,
           j.RolApp,
           p.Nombre as PuestoNombre
-         FROM Empleados j
-         LEFT JOIN Puestos p ON j.PuestoID = p.ID
-         JOIN EmpleadoJefes ej ON j.ID = ej.JefeID
+         FROM empleados j
+         LEFT JOIN puestos p ON j.PuestoID = p.ID
+         JOIN empleadojefes ej ON j.ID = ej.JefeID
          WHERE ej.EmpleadoID = ?`,
         [empleadoId]
       );
@@ -224,9 +224,9 @@ const Empleado = {
     try {
       await connection.beginTransaction();
 
-      // Actualizar la tabla Empleados
+      // Actualizar la tabla empleados
       const [resultEmpleado] = await connection.query(
-        `UPDATE Empleados 
+        `UPDATE empleados 
         SET NombreCompleto = ?, Celular = ?, FechaNacimiento = ?, 
             Direccion = ?, NSS = ?, RFC = ?, CURP = ?, 
             TelefonoEmergencia = ?, PuestoID = ?, RolApp = ?
@@ -246,22 +246,22 @@ const Empleado = {
         ]
       );
 
-      // Obtener el rol y rolID correspondiente de la tabla Roles
+      // Obtener el rol y rolID correspondiente de la tabla roles
       const [rol] = await connection.query(
-        `SELECT ID, Nombre FROM Roles WHERE Nombre = ?`,
+        `SELECT ID, Nombre FROM roles WHERE Nombre = ?`,
         [empleadoData.rolApp]
       );
 
       if (rol.length === 0) {
-        throw new Error(`No se encontró el rol '${empleadoData.rolApp}' en la tabla Roles`);
+        throw new Error(`No se encontró el rol '${empleadoData.rolApp}' en la tabla roles`);
       }
 
       const rolID = rol[0].ID;
       const rolNombre = rol[0].Nombre;
 
-      // Actualizar la tabla Usuarios
+      // Actualizar la tabla usuarios
       await connection.query(
-        `UPDATE Usuarios 
+        `UPDATE usuarios 
         SET Rol = ?, RolID = ?
         WHERE ID = ?`,
         [rolNombre, rolID, id]
@@ -285,7 +285,7 @@ const Empleado = {
 
       // Eliminar asignaciones actuales
       await connection.query(
-        'DELETE FROM EmpleadoDepartamentos WHERE EmpleadoID = ?',
+        'DELETE FROM empleadodepartamentos WHERE EmpleadoID = ?',
         [empleadoId]
       );
 
@@ -295,7 +295,7 @@ const Empleado = {
           [empleadoId, deptoId]
         );
         await connection.query(
-          'INSERT INTO EmpleadoDepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
+          'INSERT INTO empleadodepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
           [deptoValues]
         );
       }
@@ -319,7 +319,7 @@ const Empleado = {
 
       // Eliminar asignaciones actuales
       await connection.query(
-        'DELETE FROM EmpleadoJefes WHERE EmpleadoID = ?',
+        'DELETE FROM empleadojefes WHERE EmpleadoID = ?',
         [empleadoId]
       );
 
@@ -329,7 +329,7 @@ const Empleado = {
           [empleadoId, jefeId]
         );
         await connection.query(
-          'INSERT INTO EmpleadoJefes (EmpleadoID, JefeID) VALUES ?',
+          'INSERT INTO empleadojefes (EmpleadoID, JefeID) VALUES ?',
           [jefeValues]
         );
       }

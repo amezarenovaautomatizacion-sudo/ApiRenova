@@ -231,7 +231,7 @@ const insertarPermisosPorDefecto = async (pool) => {
           
           if (rolData.length > 0) {
             await pool.query(
-              'INSERT INTO permiso_roles (PermisoID, RolID) VALUES (?, ?)',
+              'INSERT INTO rolpermisos (PermisoID, RolID) VALUES (?, ?)',
               [permisoId, rolData[0].ID]
             );
           }

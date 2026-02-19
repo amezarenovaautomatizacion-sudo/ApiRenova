@@ -82,8 +82,8 @@ router.patch('/:solicitudId/cancelar',
       // Verificar que el usuario es el dueño de la solicitud o es admin/manager
       const [solicitud] = await req.app.locals.db.query(
         `SELECT s.EmpleadoID, e.UsuarioID, s.Estado
-         FROM Solicitudes s
-         JOIN Empleados e ON s.EmpleadoID = e.ID
+         FROM solicitudes s
+         JOIN empleados e ON s.EmpleadoID = e.ID
          WHERE s.ID = ?`,
         [solicitudId]
       );

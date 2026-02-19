@@ -4,7 +4,7 @@ const { pool } = require('../config/database');
 const obtenerTipoIncidenciaId = async (nombreTipo) => {
   try {
     const [tipo] = await pool.query(
-      'SELECT ID FROM TiposIncidencia WHERE Nombre = ? AND Activo = TRUE',
+      'SELECT ID FROM tiposincidencia WHERE Nombre = ? AND Activo = TRUE',
       [nombreTipo]
     );
     return tipo.length > 0 ? tipo[0].ID : null;
@@ -30,8 +30,8 @@ const Vacaciones = {
           e.CorreoElectronico,
           DATEDIFF(v.VigenciaHasta, CURDATE()) as DiasParaVencer,
           DATEDIFF(v.ProximoPeriodo, CURDATE()) as DiasParaProximoPeriodo
-         FROM VacacionesEmpleado v
-         JOIN Empleados e ON v.EmpleadoID = e.ID
+         FROM vacacionesempleado v
+         JOIN empleados e ON v.EmpleadoID = e.ID
          WHERE v.EmpleadoID = ? AND v.Activo = TRUE`,
         [empleadoId]
       );
@@ -48,7 +48,7 @@ const Vacaciones = {
     try {
       // Obtener fecha de ingreso del empleado
       const [empleado] = await pool.query(
-        'SELECT FechaIngreso FROM Empleados WHERE ID = ?',
+        'SELECT FechaIngreso FROM empleados WHERE ID = ?',
         [empleadoId]
       );
 
@@ -70,7 +70,7 @@ const Vacaciones = {
       // Obtener días según antigüedad
       const [config] = await pool.query(
         `SELECT DiasDerecho 
-         FROM ConfigVacaciones 
+         FROM configvacaciones 
          WHERE ? BETWEEN AniosMin AND AniosMax 
          AND Activo = TRUE 
          ORDER BY AniosMin LIMIT 1`,
@@ -130,7 +130,7 @@ const Vacaciones = {
 
       // Obtener días ya tomados
       const [derechosActuales] = await connection.query(
-        'SELECT DiasTomados FROM VacacionesEmpleado WHERE EmpleadoID = ?',
+        'SELECT DiasTomados FROM vacacionesempleado WHERE EmpleadoID = ?',
         [empleadoId]
       );
 
@@ -139,7 +139,7 @@ const Vacaciones = {
 
       // Actualizar o insertar
       const [result] = await connection.query(
-        `INSERT INTO VacacionesEmpleado 
+        `INSERT INTO vacacionesempleado 
          (EmpleadoID, DiasDisponibles, DiasTomados, DiasPendientes, 
           ProximoPeriodo, VigenciaHasta, UltimaActualizacion) 
          VALUES (?, ?, ?, 0, ?, ?, ?)
@@ -189,7 +189,7 @@ const Vacaciones = {
 
       // 1. Verificar que tiene días disponibles
       const [derechos] = await connection.query(
-        'SELECT DiasDisponibles FROM VacacionesEmpleado WHERE EmpleadoID = ?',
+        'SELECT DiasDisponibles FROM vacacionesempleado WHERE EmpleadoID = ?',
         [solicitudData.empleadoId]
       );
 
@@ -199,7 +199,7 @@ const Vacaciones = {
 
       // 2. Crear solicitud
       const [solicitudResult] = await connection.query(
-        `INSERT INTO Solicitudes 
+        `INSERT INTO solicitudes 
          (EmpleadoID, Tipo, Estado, Motivo, FechaSolicitud, 
           FechaInicio, FechaFin, DiasSolicitados, Observaciones) 
          VALUES (?, 'vacaciones', 'pendiente', ?, CURDATE(), ?, ?, ?, ?)`,
@@ -218,8 +218,8 @@ const Vacaciones = {
       // 3. Crear aprobaciones para los 3 aprobadores
       const [aprobadores] = await connection.query(
         `SELECT u.ID as UsuarioID, a.ID as AprobadorID
-         FROM Aprobadores a
-         JOIN Usuarios u ON a.UsuarioID = u.ID
+         FROM aprobadores a
+         JOIN usuarios u ON a.UsuarioID = u.ID
          WHERE a.Activo = TRUE
          ORDER BY a.createdAt
          LIMIT 3`
@@ -227,7 +227,7 @@ const Vacaciones = {
 
       for (let i = 0; i < aprobadores.length; i++) {
         await connection.query(
-          `INSERT INTO AprobacionesSolicitud 
+          `INSERT INTO aprobacionessolicitud 
            (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
            VALUES (?, ?, ?, 'pendiente')`,
           [solicitudId, aprobadores[i].UsuarioID, i + 1]
@@ -236,7 +236,7 @@ const Vacaciones = {
 
       // 4. Registrar en historial
       await connection.query(
-        `INSERT INTO HistorialSolicitud 
+        `INSERT INTO historialsolicitud 
          (SolicitudID, UsuarioID, Accion, EstadoNuevo, Comentarios) 
          VALUES (?, ?, 'solicitud_creada', 'pendiente', ?)`,
         [solicitudId, solicitudData.creadoPor, 'Solicitud de vacaciones creada']
@@ -271,8 +271,8 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
     // 1. Verificar que la aprobación existe y pertenece al aprobador
     const [aprobacionActual] = await connection.query(
       `SELECT aps.*, s.Tipo, s.EmpleadoID, s.Estado as EstadoSolicitud
-       FROM AprobacionesSolicitud aps
-       JOIN Solicitudes s ON aps.SolicitudID = s.ID
+       FROM aprobacionessolicitud aps
+       JOIN solicitudes s ON aps.SolicitudID = s.ID
        WHERE aps.ID = ? AND aps.AprobadorID = ?`,
       [aprobacionId, aprobadorId]
     );
@@ -294,7 +294,7 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
 
     // 3. SOLO ACTUALIZAR LA APROBACIÓN - EL TRIGGER MANEJA EL RESTO
     const [updateResult] = await connection.query(
-      `UPDATE AprobacionesSolicitud 
+      `UPDATE aprobacionessolicitud 
        SET Estado = ?, 
            FechaAprobacion = NOW(), 
            Comentarios = ?,
@@ -307,7 +307,7 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
 
     // 4. Registrar en historial (usando el estado original para la vista)
     await connection.query(
-      `INSERT INTO HistorialSolicitud 
+      `INSERT INTO historialsolicitud 
        (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios) 
        VALUES (?, ?, 'aprobacion_procesada', ?, ?, ?)`,
       [
@@ -349,8 +349,8 @@ editarAprobacion: async (aprobacionId, aprobadorId, nuevoEstado, nuevoComentario
     // 1. Obtener aprobación actual
     const [aprobacionActual] = await connection.query(
       `SELECT aps.*, s.Estado as EstadoSolicitud, s.Tipo
-       FROM AprobacionesSolicitud aps
-       JOIN Solicitudes s ON aps.SolicitudID = s.ID
+       FROM aprobacionessolicitud aps
+       JOIN solicitudes s ON aps.SolicitudID = s.ID
        WHERE aps.ID = ? AND aps.AprobadorID = ?`,
       [aprobacionId, aprobadorId]
     );
@@ -377,7 +377,7 @@ editarAprobacion: async (aprobacionId, aprobadorId, nuevoEstado, nuevoComentario
 
     // 4. SOLO ACTUALIZAR LA APROBACIÓN
     await connection.query(
-      `UPDATE AprobacionesSolicitud 
+      `UPDATE aprobacionessolicitud 
        SET Estado = ?, 
            FechaAprobacion = NOW(), 
            Comentarios = ?,
@@ -388,7 +388,7 @@ editarAprobacion: async (aprobacionId, aprobadorId, nuevoEstado, nuevoComentario
 
     // 5. Registrar en historial
     await connection.query(
-      `INSERT INTO HistorialSolicitud 
+      `INSERT INTO historialsolicitud 
        (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios) 
        VALUES (?, ?, 'aprobacion_editada', ?, ?, ?)`,
       [
@@ -430,7 +430,7 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
 
     // 1. Obtener información de la solicitud
     const [solicitud] = await connection.query(
-      `SELECT * FROM Solicitudes WHERE ID = ?`,
+      `SELECT * FROM solicitudes WHERE ID = ?`,
       [solicitudId]
     );
 
@@ -444,7 +444,7 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
     // 2. Si ya está aprobada y es vacaciones, revertir días
     if (solicitud[0].Estado === 'aprobada' && tipoSolicitud === 'vacaciones') {
       await connection.query(
-        `UPDATE VacacionesEmpleado 
+        `UPDATE vacacionesempleado 
          SET DiasTomados = DiasTomados - ?,
              DiasDisponibles = DiasDisponibles + ?,
              DiasPendientes = DiasPendientes - ?
@@ -460,13 +460,13 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
 
     // 3. Eliminar incidencia asociada si existe
     await connection.query(
-      'DELETE FROM Incidencias WHERE SolicitudID = ?',
+      'DELETE FROM incidencias WHERE SolicitudID = ?',
       [solicitudId]
     );
 
     // 4. Actualizar estado de la solicitud
     await connection.query(
-      `UPDATE Solicitudes 
+      `UPDATE solicitudes 
        SET Estado = 'cancelada', 
            updatedAt = CURRENT_TIMESTAMP 
        WHERE ID = ?`,
@@ -475,7 +475,7 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
 
     // 5. Actualizar TODAS las aprobaciones a rechazado
     await connection.query(
-      `UPDATE AprobacionesSolicitud 
+      `UPDATE aprobacionessolicitud 
        SET Estado = 'rechazado', 
            Comentarios = CONCAT('Cancelada: ', ?),
            FechaAprobacion = NOW(),
@@ -486,7 +486,7 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
 
     // 6. Registrar en historial
     await connection.query(
-      `INSERT INTO HistorialSolicitud 
+      `INSERT INTO historialsolicitud 
        (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios) 
        VALUES (?, ?, 'solicitud_cancelada', ?, 'cancelada', ?)`,
       [
@@ -529,9 +529,9 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
           COUNT(DISTINCT aps.ID) as TotalAprobadores,
           SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
           SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos
-        FROM Solicitudes s
-        JOIN Empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+        FROM solicitudes s
+        JOIN empleados e ON s.EmpleadoID = e.ID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
         WHERE s.EmpleadoID = ? AND s.Activo = TRUE
       `;
       
@@ -564,9 +564,9 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
           SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
           SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos,
           MAX(aps.FechaAprobacion) as UltimaAprobacion
-        FROM Solicitudes s
-        JOIN Empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+        FROM solicitudes s
+        JOIN empleados e ON s.EmpleadoID = e.ID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
         WHERE s.EmpleadoID = ? AND s.Estado = 'aprobada' AND s.Activo = TRUE
       `;
       
@@ -598,9 +598,9 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
           COUNT(DISTINCT aps.ID) as TotalAprobadores,
           SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
           SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos
-        FROM Solicitudes s
-        JOIN Empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+        FROM solicitudes s
+        JOIN empleados e ON s.EmpleadoID = e.ID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
         WHERE s.EmpleadoID = ? AND s.Estado = ? AND s.Activo = TRUE
       `;
       
@@ -637,12 +637,12 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
           aps.Estado as EstadoAprobacion,
           aps.FechaAprobacion,
           aps.Comentarios as ComentariosAprobacion,
-          (SELECT COUNT(*) FROM AprobacionesSolicitud WHERE SolicitudID = s.ID) as TotalAprobadores,
-          (SELECT COUNT(*) FROM AprobacionesSolicitud WHERE SolicitudID = s.ID AND Estado = 'aprobada') as Aprobados,
-          (SELECT COUNT(*) FROM AprobacionesSolicitud WHERE SolicitudID = s.ID AND Estado = 'rechazado') as Rechazados
-        FROM AprobacionesSolicitud aps
-        JOIN Solicitudes s ON aps.SolicitudID = s.ID
-        JOIN Empleados e ON s.EmpleadoID = e.ID
+          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID) as TotalAprobadores,
+          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'aprobada') as Aprobados,
+          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'rechazado') as Rechazados
+        FROM aprobacionessolicitud aps
+        JOIN solicitudes s ON aps.SolicitudID = s.ID
+        JOIN empleados e ON s.EmpleadoID = e.ID
         WHERE aps.AprobadorID = ? 
           AND aps.Estado = 'pendiente'
           AND s.Estado = 'pendiente'
@@ -678,10 +678,10 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
           COUNT(DISTINCT aps.ID) as TotalAprobadores,
           SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
           MAX(aps.FechaAprobacion) as FechaUltimaAprobacion
-        FROM Solicitudes s
-        JOIN Empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN Puestos p ON e.PuestoID = p.ID
-        LEFT JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+        FROM solicitudes s
+        JOIN empleados e ON s.EmpleadoID = e.ID
+        LEFT JOIN puestos p ON e.PuestoID = p.ID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
         WHERE s.Estado = 'aprobada' AND s.Activo = TRUE
       `;
       
@@ -732,7 +732,7 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
    */
   contarSolicitudesAprobadas: async (filtros = {}) => {
     try {
-      let query = 'SELECT COUNT(*) as total FROM Solicitudes s WHERE s.Estado = "aprobada" AND s.Activo = TRUE';
+      let query = 'SELECT COUNT(*) as total FROM solicitudes s WHERE s.Estado = "aprobada" AND s.Activo = TRUE';
       const params = [];
       
       if (filtros.empleadoId) {

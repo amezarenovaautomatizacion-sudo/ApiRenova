@@ -16,13 +16,13 @@ const vacacionesJob = {
           e.NombreCompleto,
           e.CorreoElectronico,
           DATEDIFF(ve.ProximoPeriodo, CURDATE()) as DiasParaProgramar
-         FROM VacacionesEmpleado ve
-         JOIN Empleados e ON ve.EmpleadoID = e.ID
+         FROM vacacionesempleado ve
+         JOIN empleados e ON ve.EmpleadoID = e.ID
          WHERE ve.Activo = TRUE
            AND ve.ProximoPeriodo <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
            AND ve.VigenciaHasta > CURDATE()
            AND NOT EXISTS (
-             SELECT 1 FROM PeriodosVacacionales pv 
+             SELECT 1 FROM periodosvacacionales pv 
              WHERE pv.VacacionesEmpleadoID = ve.ID 
                AND pv.Estado IN ('programado', 'en_proceso')
                AND pv.Activo = TRUE
@@ -43,14 +43,14 @@ const vacacionesJob = {
         
         // Verificar días disponibles
         const [derechos] = await pool.query(
-          'SELECT DiasDisponibles FROM VacacionesEmpleado WHERE EmpleadoID = ?',
+          'SELECT DiasDisponibles FROM vacacionesempleado WHERE EmpleadoID = ?',
           [empleado.EmpleadoID]
         );
         
         if (derechos.length > 0 && derechos[0].DiasDisponibles >= 7) {
           // Crear solicitud automática
           const [solicitudResult] = await pool.query(
-            `INSERT INTO Solicitudes 
+            `INSERT INTO solicitudes 
              (EmpleadoID, Tipo, Estado, Motivo, FechaSolicitud, 
               FechaInicio, FechaFin, DiasSolicitados, Observaciones) 
              VALUES (?, 'vacaciones', 'pendiente', ?, CURDATE(), ?, ?, ?, ?)`,
@@ -68,7 +68,7 @@ const vacacionesJob = {
 
           // Crear periodo vacacional
           await pool.query(
-            `INSERT INTO PeriodosVacacionales 
+            `INSERT INTO periodosvacacionales 
              (VacacionesEmpleadoID, SolicitudID, FechaInicio, FechaFin, DiasTomados, Estado, EsAutomatico) 
              VALUES (?, ?, ?, ?, 7, 'programado', TRUE)`,
             [
@@ -82,8 +82,8 @@ const vacacionesJob = {
           // Crear aprobaciones para los 3 aprobadores
           const [aprobadores] = await pool.query(
             `SELECT u.ID as UsuarioID, a.ID as AprobadorID
-             FROM Aprobadores a
-             JOIN Usuarios u ON a.UsuarioID = u.ID
+             FROM aprobadores a
+             JOIN usuarios u ON a.UsuarioID = u.ID
              WHERE a.Activo = TRUE
              ORDER BY a.createdAt
              LIMIT 3`
@@ -91,7 +91,7 @@ const vacacionesJob = {
 
           for (let i = 0; i < aprobadores.length; i++) {
             await pool.query(
-              `INSERT INTO AprobacionesSolicitud 
+              `INSERT INTO aprobacionessolicitud 
                (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
                VALUES (?, ?, ?, 'pendiente')`,
               [solicitudId, aprobadores[i].UsuarioID, i + 1]

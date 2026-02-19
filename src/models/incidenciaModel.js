@@ -5,7 +5,7 @@ const Incidencia = {
   create: async (incidenciaData) => {
     try {
       const [result] = await pool.query(
-        `INSERT INTO Incidencias 
+        `INSERT INTO incidencias 
          (EmpleadoID, TipoIncidenciaID, Descripcion, FechaIncidencia, 
           HoraIncidencia, Observaciones, CreadoPor) 
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -36,10 +36,10 @@ const Incidencia = {
           e.NombreCompleto as EmpleadoNombre,
           e.CorreoElectronico as EmpleadoCorreo,
           u.Usuario as CreadoPorUsuario
-         FROM Incidencias i
-         JOIN TiposIncidencia ti ON i.TipoIncidenciaID = ti.ID
-         JOIN Empleados e ON i.EmpleadoID = e.ID
-         JOIN Usuarios u ON i.CreadoPor = u.ID
+         FROM incidencias i
+         JOIN tiposincidencia ti ON i.TipoIncidenciaID = ti.ID
+         JOIN empleados e ON i.EmpleadoID = e.ID
+         JOIN usuarios u ON i.CreadoPor = u.ID
          WHERE i.ID = ?`,
         [id]
       );
@@ -63,10 +63,10 @@ const Incidencia = {
           s.Tipo as TipoSolicitud,
           s.Estado as EstadoSolicitud,
           s.Motivo as MotivoSolicitud
-         FROM Incidencias i
-         JOIN TiposIncidencia ti ON i.TipoIncidenciaID = ti.ID
-         JOIN Usuarios u ON i.CreadoPor = u.ID
-         LEFT JOIN Solicitudes s ON i.SolicitudID = s.ID
+         FROM incidencias i
+         JOIN tiposincidencia ti ON i.TipoIncidenciaID = ti.ID
+         JOIN usuarios u ON i.CreadoPor = u.ID
+         LEFT JOIN solicitudes s ON i.SolicitudID = s.ID
          WHERE i.EmpleadoID = ? AND i.Activo = TRUE
          ORDER BY i.FechaIncidencia DESC, i.createdAt DESC`,
         [empleadoId]
@@ -102,10 +102,10 @@ const Incidencia = {
           e.NombreCompleto as EmpleadoNombre,
           e.CorreoElectronico as EmpleadoCorreo,
           u.Usuario as CreadoPorUsuario
-        FROM Incidencias i
-        JOIN TiposIncidencia ti ON i.TipoIncidenciaID = ti.ID
-        JOIN Empleados e ON i.EmpleadoID = e.ID
-        JOIN Usuarios u ON i.CreadoPor = u.ID
+        FROM incidencias i
+        JOIN tiposincidencia ti ON i.TipoIncidenciaID = ti.ID
+        JOIN empleados e ON i.EmpleadoID = e.ID
+        JOIN usuarios u ON i.CreadoPor = u.ID
         WHERE i.Activo = TRUE
       `;
       
@@ -167,7 +167,7 @@ const Incidencia = {
   // Contar incidencias (para paginación)
   count: async (filtros = {}) => {
     try {
-      let query = 'SELECT COUNT(*) as total FROM Incidencias i WHERE i.Activo = TRUE';
+      let query = 'SELECT COUNT(*) as total FROM incidencias i WHERE i.Activo = TRUE';
       const params = [];
       
       // Aplicar filtros
@@ -207,7 +207,7 @@ const Incidencia = {
   update: async (id, incidenciaData) => {
     try {
       const [result] = await pool.query(
-        `UPDATE Incidencias 
+        `UPDATE incidencias 
          SET TipoIncidenciaID = ?, Descripcion = ?, FechaIncidencia = ?,
              HoraIncidencia = ?, Observaciones = ?
          WHERE ID = ?`,
@@ -230,7 +230,7 @@ const Incidencia = {
   toggleActive: async (id, activo) => {
     try {
       const [result] = await pool.query(
-        'UPDATE Incidencias SET Activo = ? WHERE ID = ?',
+        'UPDATE incidencias SET Activo = ? WHERE ID = ?',
         [activo, id]
       );
       return result.affectedRows > 0;
@@ -246,7 +246,7 @@ const Incidencia = {
       
       // Buscar el EmpleadoID del jefe
       const [jefeEmpleado] = await pool.query(
-        'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+        'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [jefeUsuarioId]
       );
       
@@ -268,7 +268,7 @@ const Incidencia = {
       const verificarJerarquia = async (jefeActualId, empleadoBuscadoId, nivel = 0) => {
         // Verificar relación directa
         const [relacionDirecta] = await pool.query(
-          'SELECT ID FROM EmpleadoJefes WHERE JefeID = ? AND EmpleadoID = ?',
+          'SELECT ID FROM empleadojefes WHERE JefeID = ? AND EmpleadoID = ?',
           [jefeActualId, empleadoBuscadoId]
         );
         
@@ -279,7 +279,7 @@ const Incidencia = {
         
         // Obtener subordinados directos del jefe actual
         const [subordinados] = await pool.query(
-          'SELECT EmpleadoID FROM EmpleadoJefes WHERE JefeID = ?',
+          'SELECT EmpleadoID FROM empleadojefes WHERE JefeID = ?',
           [jefeActualId]
         );
         

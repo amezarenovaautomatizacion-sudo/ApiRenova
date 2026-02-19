@@ -23,7 +23,7 @@ const PermisosModel = {
 
       // Crear solicitud
       const [solicitudResult] = await connection.query(
-        `INSERT INTO Solicitudes 
+        `INSERT INTO solicitudes 
          (EmpleadoID, Tipo, Estado, Motivo, FechaSolicitud, 
           FechaInicio, FechaFin, DiasSolicitados, ConGoce, Observaciones) 
          VALUES (?, 'permiso', 'pendiente', ?, CURDATE(), ?, ?, ?, ?, ?)`,
@@ -43,8 +43,8 @@ const PermisosModel = {
       // Crear aprobaciones para los 3 aprobadores
       const [aprobadores] = await connection.query(
         `SELECT u.ID as UsuarioID, a.ID as AprobadorID
-         FROM Aprobadores a
-         JOIN Usuarios u ON a.UsuarioID = u.ID
+         FROM aprobadores a
+         JOIN usuarios u ON a.UsuarioID = u.ID
          WHERE a.Activo = TRUE
          ORDER BY a.createdAt
          LIMIT 3`
@@ -52,7 +52,7 @@ const PermisosModel = {
 
       for (let i = 0; i < aprobadores.length; i++) {
         await connection.query(
-          `INSERT INTO AprobacionesSolicitud 
+          `INSERT INTO aprobacionessolicitud 
            (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
            VALUES (?, ?, ?, 'pendiente')`,
           [solicitudId, aprobadores[i].UsuarioID, i + 1]
@@ -61,7 +61,7 @@ const PermisosModel = {
 
       // Registrar en historial
       await connection.query(
-        `INSERT INTO HistorialSolicitud 
+        `INSERT INTO historialsolicitud 
          (SolicitudID, UsuarioID, Accion, EstadoNuevo, Comentarios) 
          VALUES (?, ?, 'solicitud_creada', 'pendiente', 'Solicitud de permiso creada')`,
         [solicitudId, solicitudData.creadoPor]
@@ -99,9 +99,9 @@ const PermisosModel = {
             WHEN TIMESTAMPDIFF(HOUR, NOW(), s.FechaInicio) <= 12 THEN 'proximo'
             ELSE 'normal'
           END as Prioridad
-         FROM Solicitudes s
-         JOIN Empleados e ON s.EmpleadoID = e.ID
-         JOIN AprobacionesSolicitud aps ON s.ID = aps.SolicitudID
+         FROM solicitudes s
+         JOIN empleados e ON s.EmpleadoID = e.ID
+         JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
          WHERE aps.AprobadorID = ? 
            AND aps.Estado = 'pendiente'
            AND s.Tipo = 'permiso'

@@ -28,7 +28,7 @@ const protect = async (req, res, next) => {
 
     // Buscar usuario
     const [users] = await req.app.locals.db.query(
-      'SELECT ID, Usuario, RolID, Activo FROM Usuarios WHERE ID = ?',
+      'SELECT ID, Usuario, RolID, Activo FROM usuarios WHERE ID = ?',
       [decoded.id]
     );
 

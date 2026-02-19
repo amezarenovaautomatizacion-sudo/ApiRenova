@@ -10,8 +10,8 @@ const Aprobador = {
       // 1. Verificar que el usuario existe y tiene rol admin o manager
       const [usuario] = await connection.query(
         `SELECT u.ID, r.Nombre as Rol 
-         FROM Usuarios u
-         JOIN Roles r ON u.RolID = r.ID
+         FROM usuarios u
+         JOIN roles r ON u.RolID = r.ID
          WHERE u.ID = ? AND u.Activo = TRUE AND r.Nombre IN ('admin', 'manager')`,
         [usuarioId]
       );
@@ -22,7 +22,7 @@ const Aprobador = {
 
       // 2. Verificar si ya es aprobador activo
       const [yaEsAprobador] = await connection.query(
-        'SELECT ID FROM Aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
+        'SELECT ID FROM aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
         [usuarioId]
       );
 
@@ -32,14 +32,14 @@ const Aprobador = {
 
       // 3. Buscar registro inactivo para reutilizar
       const [registroInactivo] = await connection.query(
-        'SELECT ID FROM Aprobadores WHERE UsuarioID IS NULL AND Activo = FALSE LIMIT 1'
+        'SELECT ID FROM aprobadores WHERE UsuarioID IS NULL AND Activo = FALSE LIMIT 1'
       );
 
       let resultado;
       if (registroInactivo.length > 0) {
         // Reutilizar registro inactivo
         const [updateResult] = await connection.query(
-          'UPDATE Aprobadores SET UsuarioID = ?, Activo = TRUE WHERE ID = ?',
+          'UPDATE aprobadores SET UsuarioID = ?, Activo = TRUE WHERE ID = ?',
           [usuarioId, registroInactivo[0].ID]
         );
         
@@ -51,7 +51,7 @@ const Aprobador = {
       } else {
         // Crear nuevo registro
         const [insertResult] = await connection.query(
-          'INSERT INTO Aprobadores (UsuarioID, Activo) VALUES (?, TRUE)',
+          'INSERT INTO aprobadores (UsuarioID, Activo) VALUES (?, TRUE)',
           [usuarioId]
         );
         
@@ -81,7 +81,7 @@ const Aprobador = {
 
       // 1. Verificar que existe como aprobador activo
       const [aprobador] = await connection.query(
-        'SELECT ID FROM Aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
+        'SELECT ID FROM aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
         [usuarioId]
       );
 
@@ -91,7 +91,7 @@ const Aprobador = {
 
       // 2. Marcar como inactivo y establecer UsuarioID a NULL
       const [updateResult] = await connection.query(
-        'UPDATE Aprobadores SET UsuarioID = NULL, Activo = FALSE WHERE ID = ?',
+        'UPDATE aprobadores SET UsuarioID = NULL, Activo = FALSE WHERE ID = ?',
         [aprobador[0].ID]
       );
 
@@ -122,10 +122,10 @@ const Aprobador = {
           e.NombreCompleto,
           r.Nombre as Rol,
           a.createdAt
-         FROM Aprobadores a
-         JOIN Usuarios u ON a.UsuarioID = u.ID
-         LEFT JOIN Empleados e ON u.ID = e.UsuarioID
-         LEFT JOIN Roles r ON u.RolID = r.ID
+         FROM aprobadores a
+         JOIN usuarios u ON a.UsuarioID = u.ID
+         LEFT JOIN empleados e ON u.ID = e.UsuarioID
+         LEFT JOIN roles r ON u.RolID = r.ID
          WHERE a.Activo = TRUE
          ORDER BY a.createdAt`
       );
@@ -139,7 +139,7 @@ const Aprobador = {
   esAprobador: async (usuarioId) => {
     try {
       const [rows] = await pool.query(
-        'SELECT ID FROM Aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
+        'SELECT ID FROM aprobadores WHERE UsuarioID = ? AND Activo = TRUE',
         [usuarioId]
       );
       return rows.length > 0;

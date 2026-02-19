@@ -6,10 +6,10 @@ const Permiso = {
     try {
       const [rows] = await pool.query(
         `SELECT p.* 
-         FROM Permisos p
-         JOIN RolPermisos rp ON p.ID = rp.PermisoID
-         JOIN Roles r ON rp.RolID = r.ID
-         JOIN Usuarios u ON u.RolID = r.ID
+         FROM permisos p
+         JOIN rolpermisos rp ON p.ID = rp.PermisoID
+         JOIN roles r ON rp.RolID = r.ID
+         JOIN usuarios u ON u.RolID = r.ID
          WHERE u.ID = ? 
            AND p.Endpoint LIKE ?
            AND p.Metodo = ?
@@ -31,10 +31,10 @@ const Permiso = {
     try {
       const [rows] = await pool.query(
         `SELECT p.ID, p.Nombre, p.Endpoint, p.Metodo, p.Descripcion
-         FROM Permisos p
-         JOIN RolPermisos rp ON p.ID = rp.PermisoID
-         JOIN Roles r ON rp.RolID = r.ID
-         JOIN Usuarios u ON u.RolID = r.ID
+         FROM permisos p
+         JOIN rolpermisos rp ON p.ID = rp.PermisoID
+         JOIN roles r ON rp.RolID = r.ID
+         JOIN usuarios u ON u.RolID = r.ID
          WHERE u.ID = ? 
            AND p.Activo = TRUE
            AND r.Activo = TRUE
@@ -53,8 +53,8 @@ const Permiso = {
     try {
       const [rows] = await pool.query(
         `SELECT r.* 
-         FROM Roles r
-         JOIN Usuarios u ON u.RolID = r.ID
+         FROM roles r
+         JOIN usuarios u ON u.RolID = r.ID
          WHERE u.ID = ? AND u.Activo = TRUE AND r.Activo = TRUE`,
         [usuarioId]
       );
@@ -69,7 +69,7 @@ const Permiso = {
   obtenerRoles: async () => {
     try {
       const [rows] = await pool.query(
-        'SELECT * FROM Roles WHERE Activo = TRUE ORDER BY Nivel DESC'
+        'SELECT * FROM roles WHERE Activo = TRUE ORDER BY Nivel DESC'
       );
       return rows;
     } catch (error) {
@@ -82,9 +82,9 @@ const Permiso = {
     try {
       const [rows] = await pool.query(
         `SELECT p.*, GROUP_CONCAT(r.Nombre SEPARATOR ', ') as Roles
-         FROM Permisos p
-         LEFT JOIN RolPermisos rp ON p.ID = rp.PermisoID
-         LEFT JOIN Roles r ON rp.RolID = r.ID
+         FROM permisos p
+         LEFT JOIN rolpermisos rp ON p.ID = rp.PermisoID
+         LEFT JOIN roles r ON rp.RolID = r.ID
          WHERE p.Activo = TRUE
          GROUP BY p.ID
          ORDER BY p.Endpoint, p.Metodo`
