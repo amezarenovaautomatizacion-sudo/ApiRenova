@@ -288,11 +288,19 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
     console.log(`🔍 SolicitudID: ${solicitudId}, EstadoAnterior: ${estadoAnterior}`);
 
     // 2. ¡CONVERSIÓN CRÍTICA! El trigger espera 'aprobado', no 'aprobada'
-    const estadoTrigger = estado === 'aprobada' ? 'aprobado' : estado;
+    // PERO también debemos asegurar que SIEMPRE se guarde como 'aprobado' en la BD
+    let estadoParaBD;
+    if (estado === 'aprobada' || estado === 'aprobado') {
+      estadoParaBD = 'aprobado'; // Siempre 'aprobado' para la BD
+    } else if (estado === 'rechazada' || estado === 'rechazado') {
+      estadoParaBD = 'rechazado'; // Siempre 'rechazado' para la BD
+    } else {
+      estadoParaBD = estado; // Para otros casos (pendiente, etc.)
+    }
     
-    console.log(`🔍 Estado convertido: ${estado} → ${estadoTrigger} para el trigger`);
+    console.log(`🔍 Estado convertido: ${estado} → ${estadoParaBD} para la BD`);
 
-    // 3. SOLO ACTUALIZAR LA APROBACIÓN - EL TRIGGER MANEJA EL RESTO
+    // 3. ACTUALIZAR LA APROBACIÓN CON EL ESTADO CORRECTO PARA LA BD
     const [updateResult] = await connection.query(
       `UPDATE aprobacionessolicitud 
        SET Estado = ?, 
@@ -300,12 +308,13 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
            Comentarios = ?,
            updatedAt = CURRENT_TIMESTAMP
        WHERE ID = ?`,
-      [estadoTrigger, comentarios, aprobacionId]  // ← USAMOS estadoTrigger
+      [estadoParaBD, comentarios, aprobacionId]
     );
 
     console.log(`🔍 Aprobación actualizada: ${updateResult.affectedRows} filas afectadas`);
 
     // 4. Registrar en historial (usando el estado original para la vista)
+    // Aquí podemos mantener el estado como vino del frontend para que se vea bien
     await connection.query(
       `INSERT INTO historialsolicitud 
        (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios) 
@@ -314,18 +323,25 @@ procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
         solicitudId,
         aprobadorId,
         estadoAnterior || 'pendiente',
-        estado,  // ← Guardamos 'aprobada' para que la vista lo muestre bien
+        estado,  // Guardamos el estado original para que la vista lo muestre bien
         comentarios || `Aprobación ${estado}`
       ]
     );
 
     await connection.commit();
 
+    // 5. Verificar el estado actual de la solicitud después del trigger
+    const [solicitudActualizada] = await connection.query(
+      'SELECT Estado FROM solicitudes WHERE ID = ?',
+      [solicitudId]
+    );
+
     return {
       success: true,
       aprobacionId,
       solicitudId,
-      estado,
+      estado: estado, // Devolvemos el estado original para el frontend
+      estadoSolicitud: solicitudActualizada[0]?.Estado,
       mensaje: `Aprobación ${estado} exitosamente.`
     };
 
@@ -372,10 +388,17 @@ editarAprobacion: async (aprobacionId, aprobadorId, nuevoEstado, nuevoComentario
       }
     }
 
-    // 3. ¡CONVERSIÓN CRÍTICA!
-    const estadoTrigger = nuevoEstado === 'aprobada' ? 'aprobado' : nuevoEstado;
+    // 3. Convertir estado para BD
+    let estadoParaBD;
+    if (nuevoEstado === 'aprobada' || nuevoEstado === 'aprobado') {
+      estadoParaBD = 'aprobado';
+    } else if (nuevoEstado === 'rechazada' || nuevoEstado === 'rechazado') {
+      estadoParaBD = 'rechazado';
+    } else {
+      estadoParaBD = nuevoEstado;
+    }
 
-    // 4. SOLO ACTUALIZAR LA APROBACIÓN
+    // 4. ACTUALIZAR LA APROBACIÓN
     await connection.query(
       `UPDATE aprobacionessolicitud 
        SET Estado = ?, 
@@ -383,7 +406,7 @@ editarAprobacion: async (aprobacionId, aprobadorId, nuevoEstado, nuevoComentario
            Comentarios = ?,
            updatedAt = CURRENT_TIMESTAMP
        WHERE ID = ?`,
-      [estadoTrigger, nuevoComentario, aprobacionId]
+      [estadoParaBD, nuevoComentario, aprobacionId]
     );
 
     // 5. Registrar en historial
