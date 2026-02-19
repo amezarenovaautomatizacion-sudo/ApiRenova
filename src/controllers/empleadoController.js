@@ -133,17 +133,17 @@ const empleadoController = {
       if (usuarioRol === 'admin') {
         query = `
           SELECT e.*, p.Nombre AS PuestoNombre, u.Activo AS UsuarioActivo
-          FROM Empleados e
-          LEFT JOIN Puestos p ON e.PuestoID = p.ID
-          LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
           WHERE u.Activo = TRUE
           ORDER BY e.NombreCompleto
           LIMIT ? OFFSET ?
         `;
         countQuery = `
           SELECT COUNT(*) AS total
-          FROM Empleados e
-          LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+          FROM empleados e
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
           WHERE u.Activo = TRUE
         `;
       } else {
@@ -157,17 +157,17 @@ const empleadoController = {
             e.Celular,
             p.Nombre AS PuestoNombre,
             u.Activo AS UsuarioActivo
-          FROM Empleados e
-          LEFT JOIN Puestos p ON e.PuestoID = p.ID
-          LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
           WHERE u.Activo = TRUE
           ORDER BY e.NombreCompleto
           LIMIT ? OFFSET ?
         `;
         countQuery = `
           SELECT COUNT(*) AS total
-          FROM Empleados e
-          LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
+          FROM empleados e
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
           WHERE u.Activo = TRUE
         `;
       }
@@ -205,8 +205,8 @@ const empleadoController = {
         const [rows] = await req.app.locals.db.query(
           `
           SELECT e.*, p.Nombre AS PuestoNombre, p.Descripcion AS PuestoDescripcion
-          FROM Empleados e
-          LEFT JOIN Puestos p ON e.PuestoID = p.ID
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
           WHERE e.ID = ?
           `,
           [id]
