@@ -125,10 +125,32 @@ const empleadoController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const usuarioRol = req.user.rol;
+      const search = req.query.search || '';
+      const rolFilter = req.query.rol || '';
 
       let query;
       let countQuery;
-      const queryParams = [limit, (page - 1) * limit];
+      const queryParams = [];
+      const countParams = [];
+
+      let whereClause = 'WHERE u.Activo = TRUE';
+      
+      // Agregar búsqueda si existe
+      if (search) {
+        whereClause += ` AND (e.NombreCompleto LIKE ? OR e.CorreoElectronico LIKE ?)`;
+        queryParams.push(`%${search}%`, `%${search}%`);
+        countParams.push(`%${search}%`, `%${search}%`);
+      }
+      
+      // Agregar filtro por rol si existe
+      if (rolFilter) {
+        whereClause += ` AND e.RolApp = ?`;
+        queryParams.push(rolFilter);
+        countParams.push(rolFilter);
+      }
+
+      // Agregar parámetros de paginación
+      queryParams.push(limit, (page - 1) * limit);
 
       if (usuarioRol === 'admin') {
         query = `
@@ -136,7 +158,7 @@ const empleadoController = {
           FROM empleados e
           LEFT JOIN puestos p ON e.PuestoID = p.ID
           LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-          WHERE u.Activo = TRUE
+          ${whereClause}
           ORDER BY e.NombreCompleto
           LIMIT ? OFFSET ?
         `;
@@ -144,7 +166,7 @@ const empleadoController = {
           SELECT COUNT(*) AS total
           FROM empleados e
           LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-          WHERE u.Activo = TRUE
+          ${whereClause.replace(/\?/g, () => countParams.shift() || '?')}
         `;
       } else {
         query = `
@@ -160,7 +182,7 @@ const empleadoController = {
           FROM empleados e
           LEFT JOIN puestos p ON e.PuestoID = p.ID
           LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-          WHERE u.Activo = TRUE
+          ${whereClause}
           ORDER BY e.NombreCompleto
           LIMIT ? OFFSET ?
         `;
@@ -168,12 +190,12 @@ const empleadoController = {
           SELECT COUNT(*) AS total
           FROM empleados e
           LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-          WHERE u.Activo = TRUE
+          ${whereClause.replace(/\?/g, () => countParams.shift() || '?')}
         `;
       }
 
       const [rows] = await req.app.locals.db.query(query, queryParams);
-      const [countResult] = await req.app.locals.db.query(countQuery);
+      const [countResult] = await req.app.locals.db.query(countQuery, countParams);
 
       res.status(200).json({
         success: true,
@@ -213,20 +235,31 @@ const empleadoController = {
         );
         empleado = rows[0];
       } else {
-        empleado = await Empleado.findById(id);
+        const [rows] = await req.app.locals.db.query(
+          `
+          SELECT
+            e.ID,
+            e.NombreCompleto,
+            e.CorreoElectronico,
+            e.RolApp,
+            e.FechaIngreso,
+            e.FechaNacimiento,
+            e.Celular,
+            e.TelefonoEmergencia,
+            p.Nombre AS PuestoNombre,
+            u.Activo AS UsuarioActivo
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
+          WHERE e.ID = ?
+          `,
+          [id]
+        );
+        empleado = rows[0];
 
-        if (empleado) {
-          delete empleado.NSS;
-          delete empleado.RFC;
-          delete empleado.CURP;
-          delete empleado.Direccion;
-
-          if (empleado.FechaNacimiento) {
-            const fecha = new Date(empleado.FechaNacimiento);
-            empleado.FechaNacimiento = `${fecha.getFullYear()}-${String(
-              fecha.getMonth() + 1
-            ).padStart(2, '0')}`;
-          }
+        if (empleado && empleado.FechaNacimiento) {
+          const fecha = new Date(empleado.FechaNacimiento);
+          empleado.FechaNacimiento = fecha.toISOString().split('T')[0];
         }
       }
 
@@ -236,6 +269,13 @@ const empleadoController = {
           message: 'Empleado no encontrado'
         });
       }
+
+      // Obtener estado del usuario
+      const [userRows] = await req.app.locals.db.query(
+        'SELECT Activo FROM usuarios WHERE ID = ?',
+        [empleado.UsuarioID]
+      );
+      empleado.UsuarioActivo = userRows[0]?.Activo || false;
 
       const departamentos = await Empleado.getDepartamentos(id);
       const jefes = await Empleado.getJefes(id);
@@ -283,14 +323,14 @@ const empleadoController = {
 
       const empleadoData = {
         nombreCompleto: nombreCompleto || empleadoExistente.NombreCompleto,
-        celular: celular || empleadoExistente.Celular,
+        celular: celular !== undefined ? celular : empleadoExistente.Celular,
         fechaNacimiento: fechaNacimiento || empleadoExistente.FechaNacimiento,
-        direccion: direccion || empleadoExistente.Direccion,
-        nss: nss || empleadoExistente.NSS,
-        rfc: rfc || empleadoExistente.RFC,
-        curp: curp || empleadoExistente.CURP,
-        telefonoEmergencia: telefonoEmergencia || empleadoExistente.TelefonoEmergencia,
-        puestoId: puestoId || empleadoExistente.PuestoID,
+        direccion: direccion !== undefined ? direccion : empleadoExistente.Direccion,
+        nss: nss !== undefined ? nss : empleadoExistente.NSS,
+        rfc: rfc !== undefined ? rfc : empleadoExistente.RFC,
+        curp: curp !== undefined ? curp : empleadoExistente.CURP,
+        telefonoEmergencia: telefonoEmergencia !== undefined ? telefonoEmergencia : empleadoExistente.TelefonoEmergencia,
+        puestoId: puestoId !== undefined ? puestoId : empleadoExistente.PuestoID,
         rolApp: rolApp || empleadoExistente.RolApp
       };
 
@@ -316,6 +356,126 @@ const empleadoController = {
       next(error);
     }
   },
+
+  // Cambiar estado del empleado (activar/desactivar)
+  cambiarEstadoEmpleado: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { activo } = req.body;
+
+      // Validar que se envió el estado
+      if (activo === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'El campo "activo" es requerido'
+        });
+      }
+
+      // Verificar que el empleado existe
+      const [empleado] = await req.app.locals.db.query(
+        `SELECT e.ID, e.UsuarioID, u.Activo 
+         FROM empleados e
+         JOIN usuarios u ON e.UsuarioID = u.ID
+         WHERE e.ID = ?`,
+        [id]
+      );
+
+      if (empleado.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empleado no encontrado'
+        });
+      }
+
+      // Actualizar el estado del usuario asociado
+      await req.app.locals.db.query(
+        'UPDATE usuarios SET Activo = ? WHERE ID = ?',
+        [activo, empleado[0].UsuarioID]
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `Empleado ${activo ? 'activado' : 'desactivado'} exitosamente`,
+        data: {
+          id: parseInt(id),
+          activo: activo
+        }
+      });
+
+    } catch (error) {
+      console.error('Error cambiando estado del empleado:', error);
+      next(error);
+    }
+  },
+
+// Eliminar empleado (soft delete)
+eliminarEmpleado: async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar que el empleado existe
+    const [empleado] = await req.app.locals.db.query(
+      `SELECT e.ID, e.UsuarioID, u.Activo 
+       FROM empleados e
+       JOIN usuarios u ON e.UsuarioID = u.ID
+       WHERE e.ID = ?`,
+      [id]
+    );
+
+    if (empleado.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Empleado no encontrado'
+      });
+    }
+
+    // Verificar si ya está eliminado lógicamente
+    if (!empleado[0].Activo) {
+      return res.status(400).json({
+        success: false,
+        message: 'El empleado ya está desactivado'
+      });
+    }
+
+    // Iniciar transacción
+    const connection = await req.app.locals.db.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 1. Desactivar el usuario (soft delete principal)
+      await connection.query(
+        'UPDATE usuarios SET Activo = FALSE WHERE ID = ?',
+        [empleado[0].UsuarioID]
+      );
+
+      // 2. Opcional: Desactivar relaciones donde es jefe
+      // (esto evita que aparezca en listados de jefes activos)
+      // Pero mantenemos las relaciones históricas en la tabla
+      
+      await connection.commit();
+
+      res.status(200).json({
+        success: true,
+        message: 'Empleado desactivado exitosamente (eliminado lógico)',
+        data: {
+          id: parseInt(id),
+          activo: false
+        }
+      });
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+  } catch (error) {
+    console.error('Error eliminando empleado:', error);
+    next(error);
+  }
+},
+
 
   // Obtener catálogos
   obtenerCatalogos: async (req, res, next) => {

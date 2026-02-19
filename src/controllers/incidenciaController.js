@@ -117,7 +117,7 @@ const incidenciaController = {
       if (usuarioRol === 'employee') {
         // Obtener el EmpleadoID del usuario
         const [empleado] = await req.app.locals.db.query(
-          'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+          'SELECT ID FROM empleados WHERE UsuarioID = ?',
           [usuarioId]
         );
         
@@ -208,7 +208,7 @@ const incidenciaController = {
       } else if (usuarioRol === 'employee') {
         // Employee solo puede ver las suyas propias
         const [empleado] = await req.app.locals.db.query(
-          'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+          'SELECT ID FROM empleados WHERE UsuarioID = ?',
           [usuarioId]
         );
         
@@ -516,7 +516,7 @@ const incidenciaController = {
       
       // Obtener el EmpleadoID del usuario
       const [empleado] = await req.app.locals.db.query(
-        'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+        'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
       );
       
@@ -572,7 +572,7 @@ const incidenciaController = {
     try {
       // Buscar el EmpleadoID del manager
       const [managerEmpleado] = await req.app.locals.db.query(
-        'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+        'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
       );
       

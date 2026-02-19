@@ -200,4 +200,12 @@ router.get(
   }
 );
 
+// Cambiar estado del empleado (activar/desactivar)
+router.patch(
+  '/empleados/:id/estado',
+  authenticate,
+  autorizar('/api/empleados/empleados/:id/estado', 'PATCH'),
+  empleadoController.cambiarEstadoEmpleado
+);
+
 module.exports = router;
