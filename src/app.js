@@ -28,8 +28,8 @@ app.get('/', (req, res) => {
     version: '2.0.0',
     endpoints: {
       auth: {
-        login: 'POST /api/auth/login (pública)',
-        register: 'POST /api/auth/register (pública)',
+        login: 'POST /api/auth/login',
+        register: 'POST /api/auth/register',
         profile: 'GET /api/auth/profile (autenticado)',
         verify: 'GET /api/auth/verify (autenticado)'
       },
