@@ -17,7 +17,7 @@ const permisosController = {
       
       // Obtener EmpleadoID
       const [empleado] = await req.app.locals.db.query(
-        'SELECT ID FROM Empleados WHERE UsuarioID = ?',
+        'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
       );
       

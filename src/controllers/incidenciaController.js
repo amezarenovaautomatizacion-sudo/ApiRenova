@@ -400,7 +400,7 @@ const incidenciaController = {
         console.log('👑 Admin: obteniendo todos los empleados');
         const [rows] = await req.app.locals.db.query(
           `SELECT e.ID, e.NombreCompleto, e.CorreoElectronico, e.RolApp, p.Nombre as PuestoNombre
-           FROM Empleados e
+           FROM empleados e
            JOIN Usuarios u ON e.UsuarioID = u.ID
            LEFT JOIN Puestos p ON e.PuestoID = p.ID
            WHERE u.Activo = TRUE
@@ -413,7 +413,7 @@ const incidenciaController = {
         console.log('👨‍💼 Manager: obteniendo subordinados');
         
         const [managerEmpleado] = await req.app.locals.db.query(
-          'SELECT ID, NombreCompleto FROM Empleados WHERE UsuarioID = ?',
+          'SELECT ID, NombreCompleto FROM empleados WHERE UsuarioID = ?',
           [usuarioId]
         );
         
@@ -445,7 +445,7 @@ const incidenciaController = {
               e.RolApp,
               p.Nombre as PuestoNombre,
               ej.createdAt as FechaAsignacion
-             FROM Empleados e
+             FROM empleados e
              JOIN EmpleadoJefes ej ON e.ID = ej.EmpleadoID
              LEFT JOIN Puestos p ON e.PuestoID = p.ID
              WHERE ej.JefeID = ?
@@ -592,7 +592,7 @@ const incidenciaController = {
         
         const [subordinados] = await req.app.locals.db.query(
           `SELECT e.ID, e.NombreCompleto, e.CorreoElectronico, e.RolApp
-           FROM Empleados e
+           FROM empleados e
            JOIN EmpleadoJefes ej ON e.ID = ej.EmpleadoID
            WHERE ej.JefeID = ?`,
           [jefeId]
