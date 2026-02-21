@@ -101,34 +101,34 @@ const vacacionesController = {
   },
   
   // Obtener mis solicitudes - CORREGIDO
-  obtenerMisSolicitudes: async (req, res, next) => {
-    try {
-      const usuarioId = req.user.id;
-      const { tipo } = req.query;
-      
-      // Obtener EmpleadoID
-      const [empleado] = await req.app.locals.db.query(
-        'SELECT ID FROM empleados WHERE UsuarioID = ?',
-        [usuarioId]
-      );
-      
-      if (empleado.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'Empleado no encontrado'
-        });
-      }
-      
-      const solicitudes = await Vacaciones.obtenerSolicitudesEmpleado(empleado[0].ID, tipo);
-      
-      res.status(200).json({
-        success: true,
-        data: solicitudes
+obtenerMisSolicitudes: async (req, res, next) => {
+  try {
+    const usuarioId = req.user.id;
+    const { tipo } = req.query;
+    
+    // Obtener EmpleadoID
+    const [empleado] = await req.app.locals.db.query(
+      'SELECT ID FROM empleados WHERE UsuarioID = ?',
+      [usuarioId]
+    );
+    
+    if (empleado.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Empleado no encontrado'
       });
-    } catch (error) {
-      next(error);
     }
-  },
+    
+    const solicitudes = await Vacaciones.obtenerSolicitudesEmpleado(empleado[0].ID, tipo);
+    
+    res.status(200).json({
+      success: true,
+      data: solicitudes
+    });
+  } catch (error) {
+    next(error);
+  }
+},
   
   // Obtener solicitudes pendientes para aprobar
   obtenerSolicitudesPendientes: async (req, res, next) => {

@@ -543,36 +543,36 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
   /**
    * Obtener solicitudes de un empleado
    */
-  obtenerSolicitudesEmpleado: async (empleadoId, tipo = null) => {
-    try {
-      let query = `
-        SELECT 
-          s.*,
-          e.NombreCompleto as EmpleadoNombre,
-          COUNT(DISTINCT aps.ID) as TotalAprobadores,
-          SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
-          SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos
-        FROM solicitudes s
-        JOIN empleados e ON s.EmpleadoID = e.ID
-        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
-        WHERE s.EmpleadoID = ? AND s.Activo = TRUE
-      `;
-      
-      const params = [empleadoId];
-      
-      if (tipo) {
-        query += ' AND s.Tipo = ?';
-        params.push(tipo);
-      }
-      
-      query += ' GROUP BY s.ID ORDER BY s.FechaSolicitud DESC, s.createdAt DESC';
-      
-      const [rows] = await pool.query(query, params);
-      return rows;
-    } catch (error) {
-      throw error;
+obtenerSolicitudesEmpleado: async (empleadoId, tipo = null) => {
+  try {
+    let query = `
+      SELECT 
+        s.*,
+        e.NombreCompleto as EmpleadoNombre,
+        COUNT(DISTINCT aps.ID) as TotalAprobadores,
+        SUM(CASE WHEN aps.Estado = 'aprobada' AND aps.Activo = 1 THEN 1 ELSE 0 END) as Aprobaciones,
+        SUM(CASE WHEN aps.Estado = 'rechazado' AND aps.Activo = 1 THEN 1 ELSE 0 END) as Rechazos
+      FROM solicitudes s
+      JOIN empleados e ON s.EmpleadoID = e.ID
+      LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID AND aps.Activo = 1
+      WHERE s.EmpleadoID = ? AND s.Activo = TRUE
+    `;
+    
+    const params = [empleadoId];
+    
+    if (tipo) {
+      query += ' AND s.Tipo = ?';
+      params.push(tipo);
     }
-  },
+    
+    query += ' GROUP BY s.ID ORDER BY s.FechaSolicitud DESC, s.createdAt DESC';
+    
+    const [rows] = await pool.query(query, params);
+    return rows;
+  } catch (error) {
+    throw error;
+  }
+},
 
   /**
    * Obtener solicitudes aprobadas de un empleado
@@ -647,44 +647,45 @@ cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
    * Obtener solicitudes pendientes para un aprobador
    */
   obtenerSolicitudesPendientes: async (aprobadorId) => {
-    try {
-      console.log(`🔍 [obtenerSolicitudesPendientes] Buscando para aprobadorID: ${aprobadorId}`);
-      
-      const [rows] = await pool.query(
-        `SELECT 
-          s.*,
-          e.NombreCompleto as EmpleadoNombre,
-          e.CorreoElectronico,
-          aps.ID as AprobacionID,
-          aps.OrdenAprobacion,
-          aps.Estado as EstadoAprobacion,
-          aps.FechaAprobacion,
-          aps.Comentarios as ComentariosAprobacion,
-          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID) as TotalAprobadores,
-          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'aprobada') as Aprobados,
-          (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'rechazado') as Rechazados
-        FROM aprobacionessolicitud aps
-        JOIN solicitudes s ON aps.SolicitudID = s.ID
-        JOIN empleados e ON s.EmpleadoID = e.ID
-        WHERE aps.AprobadorID = ? 
-          AND aps.Estado = 'pendiente'
-          AND s.Estado = 'pendiente'
-          AND s.Activo = TRUE
-        ORDER BY aps.OrdenAprobacion, s.FechaSolicitud DESC`,
-        [aprobadorId]
-      );
-      
-      console.log(`📊 Solicitudes pendientes encontradas: ${rows.length}`);
-      rows.forEach((row, index) => {
-        console.log(`${index + 1}. SolicitudID: ${row.ID}, AprobacionID: ${row.AprobacionID}, Empleado: ${row.EmpleadoNombre}`);
-      });
-      
-      return rows;
-    } catch (error) {
-      console.error('❌ Error en obtenerSolicitudesPendientes:', error);
-      throw error;
-    }
-  },
+  try {
+    console.log(`[obtenerSolicitudesPendientes] Buscando para aprobadorID: ${aprobadorId}`);
+    
+    const [rows] = await pool.query(
+      `SELECT 
+        s.*,
+        e.NombreCompleto as EmpleadoNombre,
+        e.CorreoElectronico,
+        aps.ID as AprobacionID,
+        aps.OrdenAprobacion,
+        aps.Estado as EstadoAprobacion,
+        aps.FechaAprobacion,
+        aps.Comentarios as ComentariosAprobacion,
+        (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Activo = 1) as TotalAprobadores,
+        (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'aprobada' AND Activo = 1) as Aprobados,
+        (SELECT COUNT(*) FROM aprobacionessolicitud WHERE SolicitudID = s.ID AND Estado = 'rechazado' AND Activo = 1) as Rechazados
+      FROM aprobacionessolicitud aps
+      JOIN solicitudes s ON aps.SolicitudID = s.ID
+      JOIN empleados e ON s.EmpleadoID = e.ID
+      WHERE aps.AprobadorID = ? 
+        AND aps.Estado = 'pendiente'
+        AND aps.Activo = 1
+        AND s.Estado = 'pendiente'
+        AND s.Activo = TRUE
+      ORDER BY aps.OrdenAprobacion, s.FechaSolicitud DESC`,
+      [aprobadorId]
+    );
+    
+    console.log(`Solicitudes pendientes encontradas: ${rows.length}`);
+    rows.forEach((row, index) => {
+      console.log(`${index + 1}. SolicitudID: ${row.ID}, AprobacionID: ${row.AprobacionID}, Empleado: ${row.EmpleadoNombre}`);
+    });
+    
+    return rows;
+  } catch (error) {
+    console.error('❌ Error en obtenerSolicitudesPendientes:', error);
+    throw error;
+  }
+},
 
   /**
    * Obtener todas las solicitudes aprobadas (para admin/manager)
