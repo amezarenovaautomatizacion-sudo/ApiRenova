@@ -40,21 +40,25 @@ const PermisosModel = {
 
       const solicitudId = solicitudResult.insertId;
 
-      // Crear aprobaciones para los 3 aprobadores
+      // Obtener aprobadores ACTIVOS (dinámico)
       const [aprobadores] = await connection.query(
-        `SELECT u.ID as UsuarioID, a.ID as AprobadorID
+        `SELECT u.ID as UsuarioID
          FROM aprobadores a
          JOIN usuarios u ON a.UsuarioID = u.ID
          WHERE a.Activo = TRUE
-         ORDER BY a.createdAt
-         LIMIT 3`
+         ORDER BY a.createdAt`,
+        []
       );
+
+      if (aprobadores.length === 0) {
+        throw new Error('No hay aprobadores activos en el sistema');
+      }
 
       for (let i = 0; i < aprobadores.length; i++) {
         await connection.query(
           `INSERT INTO aprobacionessolicitud 
-           (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
-           VALUES (?, ?, ?, 'pendiente')`,
+           (SolicitudID, AprobadorID, OrdenAprobacion, Estado, Activo) 
+           VALUES (?, ?, ?, 'pendiente', 1)`,
           [solicitudId, aprobadores[i].UsuarioID, i + 1]
         );
       }
@@ -104,6 +108,7 @@ const PermisosModel = {
          JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
          WHERE aps.AprobadorID = ? 
            AND aps.Estado = 'pendiente'
+           AND aps.Activo = 1
            AND s.Tipo = 'permiso'
            AND s.Estado = 'pendiente'
            AND s.Activo = TRUE

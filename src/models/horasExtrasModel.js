@@ -34,21 +34,25 @@ const HorasExtras = {
 
       const solicitudId = solicitudResult.insertId;
 
-      // Crear aprobaciones para los 3 aprobadores
+      // Obtener aprobadores ACTIVOS (dinámico)
       const [aprobadores] = await connection.query(
-        `SELECT u.ID as UsuarioID, a.ID as AprobadorID
+        `SELECT u.ID as UsuarioID
          FROM aprobadores a
          JOIN usuarios u ON a.UsuarioID = u.ID
          WHERE a.Activo = TRUE
-         ORDER BY a.createdAt
-         LIMIT 3`
+         ORDER BY a.createdAt`,
+        []
       );
+
+      if (aprobadores.length === 0) {
+        throw new Error('No hay aprobadores activos en el sistema');
+      }
 
       for (let i = 0; i < aprobadores.length; i++) {
         await connection.query(
           `INSERT INTO aprobacionessolicitud 
-           (SolicitudID, AprobadorID, OrdenAprobacion, Estado) 
-           VALUES (?, ?, ?, 'pendiente')`,
+           (SolicitudID, AprobadorID, OrdenAprobacion, Estado, Activo) 
+           VALUES (?, ?, ?, 'pendiente', 1)`,
           [solicitudId, aprobadores[i].UsuarioID, i + 1]
         );
       }
@@ -87,12 +91,12 @@ const HorasExtras = {
           e.CorreoElectronico,
           e.PuestoID,
           p.Nombre as PuestoNombre,
-          SUM(CASE WHEN aps.Estado = 'aprobada' THEN 1 ELSE 0 END) as Aprobaciones,
-          SUM(CASE WHEN aps.Estado = 'rechazado' THEN 1 ELSE 0 END) as Rechazos
+          SUM(CASE WHEN aps.Estado = 'aprobada' AND aps.Activo = 1 THEN 1 ELSE 0 END) as Aprobaciones,
+          SUM(CASE WHEN aps.Estado = 'rechazado' AND aps.Activo = 1 THEN 1 ELSE 0 END) as Rechazos
         FROM solicitudes s
         JOIN empleados e ON s.EmpleadoID = e.ID
         LEFT JOIN puestos p ON e.PuestoID = p.ID
-        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID
+        LEFT JOIN aprobacionessolicitud aps ON s.ID = aps.SolicitudID AND aps.Activo = 1
         WHERE s.Tipo = 'horas_extras' AND s.Activo = TRUE
       `;
       
