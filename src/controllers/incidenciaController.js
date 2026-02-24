@@ -401,7 +401,7 @@ const incidenciaController = {
         const [rows] = await req.app.locals.db.query(
           `SELECT e.ID, e.NombreCompleto, e.CorreoElectronico, e.RolApp, p.Nombre as PuestoNombre
            FROM empleados e
-           JOIN Usuarios u ON e.UsuarioID = u.ID
+           JOIN usuarios u ON e.UsuarioID = u.ID
            LEFT JOIN Puestos p ON e.PuestoID = p.ID
            WHERE u.Activo = TRUE
            ORDER BY e.NombreCompleto`
