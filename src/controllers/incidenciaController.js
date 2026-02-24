@@ -380,13 +380,13 @@ const incidenciaController = {
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
       
-      console.log(`\n🎯 [obtenerEmpleadosSupervisados] INICIANDO...`);
+      console.log(`\n[obtenerEmpleadosSupervisados] INICIANDO...`);
       console.log(`   UsuarioID: ${usuarioId}`);
       console.log(`   Rol: ${usuarioRol}`);
       
       // Solo manager y admin pueden usar este endpoint
       if (!['admin', 'manager'].includes(usuarioRol)) {
-        console.log('❌ Usuario no autorizado');
+        console.log('Usuario no autorizado');
         return res.status(403).json({
           success: false,
           message: 'Solo administradores y managers pueden ver empleados supervisados'
@@ -397,30 +397,30 @@ const incidenciaController = {
       
       if (usuarioRol === 'admin') {
         // Admin puede ver todos los empleados
-        console.log('👑 Admin: obteniendo todos los empleados');
+        console.log('Admin: obteniendo todos los empleados');
         const [rows] = await req.app.locals.db.query(
           `SELECT e.ID, e.NombreCompleto, e.CorreoElectronico, e.RolApp, p.Nombre as PuestoNombre
            FROM empleados e
            JOIN usuarios u ON e.UsuarioID = u.ID
-           LEFT JOIN Puestos p ON e.PuestoID = p.ID
+           LEFT JOIN puestos p ON e.PuestoID = p.ID
            WHERE u.Activo = TRUE
            ORDER BY e.NombreCompleto`
         );
         empleados = rows;
-        console.log(`📊 Admin - Empleados encontrados: ${empleados.length}`);
+        console.log(`Admin - Empleados encontrados: ${empleados.length}`);
       } else {
         // Manager: obtener su EmpleadoID primero
-        console.log('👨‍💼 Manager: obteniendo subordinados');
+        console.log('Manager: obteniendo subordinados');
         
         const [managerEmpleado] = await req.app.locals.db.query(
           'SELECT ID, NombreCompleto FROM empleados WHERE UsuarioID = ?',
           [usuarioId]
         );
         
-        console.log(`🔍 Manager empleado:`, managerEmpleado);
+        console.log(`Manager empleado:`, managerEmpleado);
         
         if (managerEmpleado.length === 0) {
-          console.log('❌ No se encontró información del manager');
+          console.log('No se encontró información del manager');
           return res.status(404).json({
             success: false,
             message: 'No se encontró información del manager'
@@ -430,12 +430,12 @@ const incidenciaController = {
         const managerEmpleadoId = managerEmpleado[0].ID;
         const managerNombre = managerEmpleado[0].NombreCompleto;
         
-        console.log(`🔍 Manager EmpleadoID: ${managerEmpleadoId} (${managerNombre})`);
+        console.log(`Manager EmpleadoID: ${managerEmpleadoId} (${managerNombre})`);
         
         // Función recursiva para obtener subordinados
         const obtenerSubordinadosRecursivo = async (jefeId, nivel = 0) => {
           const indent = '  '.repeat(nivel);
-          console.log(`${indent}🔍 Nivel ${nivel}: buscando subordinados de jefe ID ${jefeId}`);
+          console.log(`${indent}Nivel ${nivel}: buscando subordinados de jefe ID ${jefeId}`);
           
           const [subordinados] = await req.app.locals.db.query(
             `SELECT 
@@ -453,7 +453,7 @@ const incidenciaController = {
             [jefeId]
           );
           
-          console.log(`${indent}📊 Subordinados encontrados: ${subordinados.length}`);
+          console.log(`${indent}Subordinados encontrados: ${subordinados.length}`);
           
           let todosSubordinados = [...subordinados];
           
@@ -470,7 +470,7 @@ const incidenciaController = {
         // Obtener todos los subordinados (directos e indirectos)
         const todosSubordinados = await obtenerSubordinadosRecursivo(managerEmpleadoId);
         
-        console.log(`📊 Total subordinados (todos niveles): ${todosSubordinados.length}`);
+        console.log(`Total subordinados (todos niveles): ${todosSubordinados.length}`);
         
         // Eliminar duplicados
         const empleadosUnicos = [];
@@ -486,10 +486,10 @@ const incidenciaController = {
         }
         
         empleados = empleadosUnicos;
-        console.log(`📊 Empleados únicos después de eliminar duplicados: ${empleados.length}`);
+        console.log(`Empleados únicos después de eliminar duplicados: ${empleados.length}`);
       }
       
-      console.log(`🎯 [obtenerEmpleadosSupervisados] FINALIZADO - Total: ${empleados.length} empleados\n`);
+      console.log(`[obtenerEmpleadosSupervisados] FINALIZADO - Total: ${empleados.length} empleados\n`);
       
       res.status(200).json({
         success: true,
@@ -497,7 +497,7 @@ const incidenciaController = {
       });
       
     } catch (error) {
-      console.error('❌ ERROR en obtenerEmpleadosSupervisados:', error);
+      console.error('ERROR en obtenerEmpleadosSupervisados:', error);
       console.error('Stack:', error.stack);
       return res.status(500).json({
         success: false,
@@ -512,7 +512,7 @@ const incidenciaController = {
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
       
-      console.log(`🔍 [obtenerMisIncidencias] UsuarioID: ${usuarioId}, Rol: ${usuarioRol}`);
+      console.log(`[obtenerMisIncidencias] UsuarioID: ${usuarioId}, Rol: ${usuarioRol}`);
       
       // Obtener el EmpleadoID del usuario
       const [empleado] = await req.app.locals.db.query(
@@ -520,7 +520,7 @@ const incidenciaController = {
         [usuarioId]
       );
       
-      console.log(`🔍 [obtenerMisIncidencias] Empleado encontrado:`, empleado);
+      console.log(`[obtenerMisIncidencias] Empleado encontrado:`, empleado);
       
       if (empleado.length === 0) {
         return res.status(404).json({
@@ -530,11 +530,11 @@ const incidenciaController = {
       }
       
       const empleadoId = empleado[0].ID;
-      console.log(`🔍 [obtenerMisIncidencias] EmpleadoID: ${empleadoId}`);
+      console.log(`[obtenerMisIncidencias] EmpleadoID: ${empleadoId}`);
       
       // Obtener incidencias del empleado
       const incidencias = await Incidencia.findByEmpleadoId(empleadoId);
-      console.log(`🔍 [obtenerMisIncidencias] Incidencias encontradas: ${incidencias.length}`);
+      console.log(`[obtenerMisIncidencias] Incidencias encontradas: ${incidencias.length}`);
       
       if (incidencias.length === 0) {
         return res.status(200).json({
@@ -549,7 +549,7 @@ const incidenciaController = {
         data: incidencias
       });
     } catch (error) {
-      console.error('❌ Error en obtenerMisIncidencias:', error);
+      console.error('Error en obtenerMisIncidencias:', error);
       next(error);
     }
   },
