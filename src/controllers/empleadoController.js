@@ -215,147 +215,142 @@ const empleadoController = {
     }
   },
 
-  // Obtener empleado por ID (filtrado por rol)
-  obtenerEmpleado: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const usuarioRol = req.user.rol;
+// Obtener empleado por ID (filtrado por rol)
+obtenerEmpleado: async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const usuarioRol = req.user.rol;
 
-      let empleado;
+    let empleado;
 
-      if (usuarioRol === 'admin') {
-        const [rows] = await req.app.locals.db.query(
-          `
-          SELECT e.*, p.Nombre AS PuestoNombre, p.Descripcion AS PuestoDescripcion
-          FROM empleados e
-          LEFT JOIN puestos p ON e.PuestoID = p.ID
-          WHERE e.ID = ?
-          `,
-          [id]
-        );
-        empleado = rows[0];
-      } else {
-        const [rows] = await req.app.locals.db.query(
-          `
-          SELECT
-            e.ID,
-            e.NombreCompleto,
-            e.CorreoElectronico,
-            e.RolApp,
-            e.FechaIngreso,
-            e.FechaNacimiento,
-            e.Celular,
-            e.TelefonoEmergencia,
-            p.Nombre AS PuestoNombre,
-            u.Activo AS UsuarioActivo
-          FROM empleados e
-          LEFT JOIN puestos p ON e.PuestoID = p.ID
-          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-          WHERE e.ID = ?
-          `,
-          [id]
-        );
-        empleado = rows[0];
-
-        if (empleado && empleado.FechaNacimiento) {
-          const fecha = new Date(empleado.FechaNacimiento);
-          empleado.FechaNacimiento = fecha.toISOString().split('T')[0];
-        }
-      }
-
-      if (!empleado) {
-        return res.status(404).json({
-          success: false,
-          message: 'Empleado no encontrado'
-        });
-      }
-
-      // Obtener estado del usuario
-      const [userRows] = await req.app.locals.db.query(
-        'SELECT Activo FROM usuarios WHERE ID = ?',
-        [empleado.UsuarioID]
+    if (usuarioRol === 'admin') {
+      const [rows] = await req.app.locals.db.query(
+        `
+        SELECT e.*, p.Nombre AS PuestoNombre, p.Descripcion AS PuestoDescripcion
+        FROM empleados e
+        LEFT JOIN puestos p ON e.PuestoID = p.ID
+        WHERE e.ID = ?
+        `,
+        [id]
       );
-      empleado.UsuarioActivo = userRows[0]?.Activo || false;
+      empleado = rows[0];
+    } else {
+      const [rows] = await req.app.locals.db.query(
+        `
+        SELECT
+          e.ID,
+          e.NombreCompleto,
+          e.CorreoElectronico,
+          e.RolApp,
+          e.FechaIngreso,
+          e.FechaNacimiento,
+          e.Celular,
+          e.TelefonoEmergencia,
+          p.Nombre AS PuestoNombre,
+          u.Activo AS UsuarioActivo
+        FROM empleados e
+        LEFT JOIN puestos p ON e.PuestoID = p.ID
+        LEFT JOIN usuarios u ON e.UsuarioID = u.ID
+        WHERE e.ID = ?
+        `,
+        [id]
+      );
+      empleado = rows[0];
 
-      const departamentos = await Empleado.getDepartamentos(id);
-      const jefes = await Empleado.getJefes(id);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          ...empleado,
-          departamentos,
-          jefes
-        }
-      });
-
-    } catch (error) {
-      next(error);
+      if (empleado && empleado.FechaNacimiento) {
+        const fecha = new Date(empleado.FechaNacimiento);
+        empleado.FechaNacimiento = fecha.toISOString().split('T')[0];
+      }
     }
-  },
+
+    if (!empleado) {
+      return res.status(404).json({
+        success: false,
+        message: 'Empleado no encontrado'
+      });
+    }
+
+    // Obtener estado del usuario
+    const [userRows] = await req.app.locals.db.query(
+      'SELECT Activo FROM usuarios WHERE ID = ?',
+      [empleado.UsuarioID]
+    );
+    empleado.UsuarioActivo = userRows[0]?.Activo || false;
+
+    // Obtener departamentos del empleado
+    const [departamentosRows] = await req.app.locals.db.query(
+      `SELECT d.* 
+       FROM departamentos d
+       INNER JOIN empleadodepartamentos ed ON d.ID = ed.DepartamentoID
+       WHERE ed.EmpleadoID = ? AND d.Activo = TRUE
+       ORDER BY d.Nombre`,
+      [id]
+    );
+
+    // Obtener jefes del empleado
+    const [jefesRows] = await req.app.locals.db.query(
+      `SELECT 
+        j.ID,
+        j.NombreCompleto,
+        j.CorreoElectronico,
+        j.RolApp,
+        p.Nombre as PuestoNombre
+       FROM empleados j
+       LEFT JOIN puestos p ON j.PuestoID = p.ID
+       INNER JOIN empleadojefes ej ON j.ID = ej.JefeID
+       WHERE ej.EmpleadoID = ?
+       ORDER BY j.NombreCompleto`,
+      [id]
+    );
+
+    // LOG DETALLADO de cada jefe encontrado
+    jefesRows.forEach((jefe, index) => {
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...empleado,
+        departamentos: departamentosRows,
+        jefes: jefesRows
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error en obtenerEmpleado:', error);
+    next(error);
+  }
+},
 
   // Actualizar empleado
-  actualizarEmpleado: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const {
-        nombreCompleto,
-        celular,
-        fechaNacimiento,
-        direccion,
-        nss,
-        rfc,
-        curp,
-        telefonoEmergencia,
-        puestoId,
-        rolApp,
-        departamentos,
-        jefes
-      } = req.body;
+actualizarEmpleado: async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { departamentos, jefes, ...otrosCampos } = req.body;
 
-      const empleadoExistente = await Empleado.findById(id);
-      if (!empleadoExistente) {
-        return res.status(404).json({
-          success: false,
-          message: 'Empleado no encontrado'
-        });
-      }
-
-      const empleadoData = {
-        nombreCompleto: nombreCompleto || empleadoExistente.NombreCompleto,
-        celular: celular !== undefined ? celular : empleadoExistente.Celular,
-        fechaNacimiento: fechaNacimiento || empleadoExistente.FechaNacimiento,
-        direccion: direccion !== undefined ? direccion : empleadoExistente.Direccion,
-        nss: nss !== undefined ? nss : empleadoExistente.NSS,
-        rfc: rfc !== undefined ? rfc : empleadoExistente.RFC,
-        curp: curp !== undefined ? curp : empleadoExistente.CURP,
-        telefonoEmergencia: telefonoEmergencia !== undefined ? telefonoEmergencia : empleadoExistente.TelefonoEmergencia,
-        puestoId: puestoId !== undefined ? puestoId : empleadoExistente.PuestoID,
-        rolApp: rolApp || empleadoExistente.RolApp
-      };
-
-      await Empleado.update(id, empleadoData);
-
-      if (departamentos !== undefined) {
-        await Empleado.updateDepartamentos(id, departamentos);
-      }
-
-      if (jefes !== undefined) {
-        await Empleado.updateJefes(id, jefes);
-      }
-
-      const empleadoActualizado = await Empleado.findById(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Empleado actualizado exitosamente',
-        data: empleadoActualizado
-      });
-
-    } catch (error) {
-      next(error);
+    // Actualizar datos básicos
+    await Empleado.update(id, otrosCampos);
+    
+    // Actualizar departamentos si vienen en la petición
+    if (departamentos !== undefined) {
+      await Empleado.updateDepartamentos(id, departamentos);
     }
-  },
+    
+    // Actualizar jefes si vienen en la petición
+    if (jefes !== undefined) {
+      await Empleado.updateJefes(id, jefes);
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Empleado actualizado exitosamente' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error en actualizarEmpleado:', error);
+    next(error);
+  }
+},
 
   // Cambiar estado del empleado (activar/desactivar)
   cambiarEstadoEmpleado: async (req, res, next) => {

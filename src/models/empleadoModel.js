@@ -219,36 +219,70 @@ const Empleado = {
   },
 
   // Actualizar empleado y sincronizar rol en usuarios
-  update: async (id, empleadoData) => {
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
+update: async (id, empleadoData) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
 
-      // Actualizar la tabla empleados
-      const [resultEmpleado] = await connection.query(
-        `UPDATE empleados 
-        SET NombreCompleto = ?, Celular = ?, FechaNacimiento = ?, 
-            Direccion = ?, NSS = ?, RFC = ?, CURP = ?, 
-            TelefonoEmergencia = ?, PuestoID = ?, RolApp = ?
-        WHERE ID = ?`,
-        [
-          empleadoData.nombreCompleto,
-          empleadoData.celular,
-          empleadoData.fechaNacimiento,
-          empleadoData.direccion,
-          empleadoData.nss,
-          empleadoData.rfc,
-          empleadoData.curp,
-          empleadoData.telefonoEmergencia,
-          empleadoData.puestoId,
-          empleadoData.rolApp,
-          id
-        ]
-      );
+    // Construir query dinámicamente para empleados
+    let updateEmpleadoQuery = 'UPDATE empleados SET ';
+    const empleadoValues = [];
+    const camposEmpleado = [];
+    
+    if (empleadoData.nombreCompleto !== undefined) {
+      camposEmpleado.push('NombreCompleto = ?');
+      empleadoValues.push(empleadoData.nombreCompleto);
+    }
+    if (empleadoData.celular !== undefined) {
+      camposEmpleado.push('Celular = ?');
+      empleadoValues.push(empleadoData.celular);
+    }
+    if (empleadoData.fechaNacimiento !== undefined) {
+      camposEmpleado.push('FechaNacimiento = ?');
+      empleadoValues.push(empleadoData.fechaNacimiento);
+    }
+    if (empleadoData.direccion !== undefined) {
+      camposEmpleado.push('Direccion = ?');
+      empleadoValues.push(empleadoData.direccion);
+    }
+    if (empleadoData.nss !== undefined) {
+      camposEmpleado.push('NSS = ?');
+      empleadoValues.push(empleadoData.nss);
+    }
+    if (empleadoData.rfc !== undefined) {
+      camposEmpleado.push('RFC = ?');
+      empleadoValues.push(empleadoData.rfc);
+    }
+    if (empleadoData.curp !== undefined) {
+      camposEmpleado.push('CURP = ?');
+      empleadoValues.push(empleadoData.curp);
+    }
+    if (empleadoData.telefonoEmergencia !== undefined) {
+      camposEmpleado.push('TelefonoEmergencia = ?');
+      empleadoValues.push(empleadoData.telefonoEmergencia);
+    }
+    if (empleadoData.puestoId !== undefined) {
+      camposEmpleado.push('PuestoID = ?');
+      empleadoValues.push(empleadoData.puestoId);
+    }
+    if (empleadoData.rolApp !== undefined) {
+      camposEmpleado.push('RolApp = ?');
+      empleadoValues.push(empleadoData.rolApp);
+    }
+    
+    if (camposEmpleado.length > 0) {
+      updateEmpleadoQuery += camposEmpleado.join(', ') + ' WHERE ID = ?';
+      empleadoValues.push(id);
+      
+      const [resultEmpleado] = await connection.query(updateEmpleadoQuery, empleadoValues);
+      console.log('✅ Empleado actualizado:', resultEmpleado.affectedRows);
+    }
 
-      // Obtener el rol y rolID correspondiente de la tabla roles
+    // Solo actualizar usuarios si se envió rolApp
+    if (empleadoData.rolApp !== undefined) {
+      // Obtener el rol y rolID correspondiente
       const [rol] = await connection.query(
-        `SELECT ID, Nombre FROM roles WHERE Nombre = ?`,
+        'SELECT ID, Nombre FROM roles WHERE Nombre = ?',
         [empleadoData.rolApp]
       );
 
@@ -259,57 +293,66 @@ const Empleado = {
       const rolID = rol[0].ID;
       const rolNombre = rol[0].Nombre;
 
-      // Actualizar la tabla usuarios
+      // Actualizar usuarios
       await connection.query(
-        `UPDATE usuarios 
-        SET Rol = ?, RolID = ?
-        WHERE ID = ?`,
+        'UPDATE usuarios SET Rol = ?, RolID = ? WHERE ID = ?',
         [rolNombre, rolID, id]
       );
-
-      await connection.commit();
-      return resultEmpleado.affectedRows > 0;
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
+      console.log('✅ Usuario actualizado con rol:', rolNombre);
     }
-  },
+
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+},
 
   // Actualizar departamentos del empleado
-  updateDepartamentos: async (empleadoId, departamentos) => {
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
+updateDepartamentos: async (empleadoId, departamentos) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    
+    console.log('🔍 [updateDepartamentos] Iniciando para empleado:', empleadoId);
+    console.log('🔍 Departamentos a insertar:', departamentos);
 
-      // Eliminar asignaciones actuales
-      await connection.query(
-        'DELETE FROM empleadodepartamentos WHERE EmpleadoID = ?',
-        [empleadoId]
+    // Eliminar asignaciones actuales
+    const [deleteResult] = await connection.query(
+      'DELETE FROM empleadodepartamentos WHERE EmpleadoID = ?',
+      [empleadoId]
+    );
+    console.log('🗑️ Registros eliminados:', deleteResult.affectedRows);
+
+    // Insertar nuevas asignaciones si hay
+    if (departamentos && departamentos.length > 0) {
+      const deptoValues = departamentos.map(deptoId => 
+        [empleadoId, deptoId]
       );
-
-      // Insertar nuevas asignaciones si hay
-      if (departamentos && departamentos.length > 0) {
-        const deptoValues = departamentos.map(deptoId => 
-          [empleadoId, deptoId]
-        );
-        await connection.query(
-          'INSERT INTO empleadodepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
-          [deptoValues]
-        );
-      }
-
-      await connection.commit();
-      return true;
-
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
+      console.log('➕ Valores a insertar:', deptoValues);
+      
+      const [insertResult] = await connection.query(
+        'INSERT INTO empleadodepartamentos (EmpleadoID, DepartamentoID) VALUES ?',
+        [deptoValues]
+      );
+      console.log('✅ Registros insertados:', insertResult.affectedRows);
     }
-  },
+
+    await connection.commit();
+    console.log('✅ Transacción completada');
+    return true;
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('❌ Error en updateDepartamentos:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+},
 
   // Actualizar jefes del empleado
   updateJefes: async (empleadoId, jefes) => {
