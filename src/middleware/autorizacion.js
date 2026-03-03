@@ -90,9 +90,9 @@ const autorizarPorRol = (...rolesPermitidos) => {
  * en la tabla 'permisos' para que funcionen con el middleware autorizar()
  */
 
-// ============================================
+
 // PERMISOS PARA PROYECTOS
-// ============================================
+
 
 const PERMISOS_PROYECTOS = [
   // CRUD Proyectos
@@ -108,9 +108,9 @@ const PERMISOS_PROYECTOS = [
   { endpoint: '/api/proyectos/asignados', metodo: 'GET', roles: ['employee'] },
 ];
 
-// ============================================
+
 // PERMISOS PARA GESTIÓN DE EMPLEADOS EN PROYECTOS
-// ============================================
+
 
 const PERMISOS_EMPLEADOS_PROYECTO = [
   // Asignar/Quitar empleados
@@ -123,9 +123,9 @@ const PERMISOS_EMPLEADOS_PROYECTO = [
   { endpoint: '/api/proyectos/:id/empleados/buscar', metodo: 'GET', roles: ['admin', 'manager'] },
 ];
 
-// ============================================
+
 // PERMISOS PARA TAREAS
-// ============================================
+
 
 const PERMISOS_TAREAS = [
   // CRUD Tareas
@@ -143,9 +143,9 @@ const PERMISOS_TAREAS = [
   { endpoint: '/api/proyectos/:id/tareas/:tareaId', metodo: 'DELETE', roles: ['admin', 'manager'] },
 ];
 
-// ============================================
+
 // PERMISOS PARA ASIGNACIÓN DE TAREAS
-// ============================================
+
 
 const PERMISOS_ASIGNACION_TAREAS = [
   // ✅ REASIGNAR TAREA - Solo Admin y Jefe
@@ -161,9 +161,9 @@ const PERMISOS_ASIGNACION_TAREAS = [
   { endpoint: '/api/proyectos/:id/tareas/:tareaId/asignaciones/:asignacionId', metodo: 'DELETE', roles: ['admin', 'manager'] },
 ];
 
-// ============================================
+
 // PERMISOS PARA NOTAS EN TAREAS
-// ============================================
+
 
 const PERMISOS_NOTAS = [
   { endpoint: '/api/proyectos/:id/tareas/:tareaId/notas', metodo: 'POST', roles: ['admin', 'manager', 'employee'] },
@@ -172,17 +172,17 @@ const PERMISOS_NOTAS = [
   { endpoint: '/api/proyectos/:id/tareas/:tareaId/notas/:notaId', metodo: 'DELETE', roles: ['admin', 'manager', 'employee'] },
 ];
 
-// ============================================
+
 // PERMISOS PARA HISTORIAL
-// ============================================
+
 
 const PERMISOS_HISTORIAL = [
   { endpoint: '/api/proyectos/:id/historial', metodo: 'GET', roles: ['admin', 'manager', 'employee'] },
 ];
 
-// ============================================
+
 // AGRUPAR TODOS LOS PERMISOS
-// ============================================
+
 
 const TODOS_LOS_PERMISOS = [
   ...PERMISOS_PROYECTOS,
@@ -193,9 +193,9 @@ const TODOS_LOS_PERMISOS = [
   ...PERMISOS_HISTORIAL
 ];
 
-// ============================================
+
 // FUNCIÓN PARA INSERTAR PERMISOS EN BASE DE DATOS
-// ============================================
+
 
 /**
  * Función para insertar todos los permisos en la base de datos

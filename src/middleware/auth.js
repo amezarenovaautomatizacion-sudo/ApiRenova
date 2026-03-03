@@ -3,47 +3,61 @@ const User = require('../models/userModel');
 
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token;
+
+    // Verificar si hay token en headers
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Acceso no autorizado. Token no proporcionado.'
+        message: 'No autorizado - Token no proporcionado'
       });
     }
 
-    const token = authHeader.split(' ')[1];
+    // Verificar token
     const decoded = verifyToken(token);
-
+    
     if (!decoded) {
       return res.status(401).json({
         success: false,
-        message: 'Token inválido o expirado.'
+        message: 'No autorizado - Token inválido'
       });
     }
 
-    // Obtener usuario de la base de datos para verificar rol
+    // Buscar usuario
     const user = await User.findById(decoded.id);
     
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Usuario no encontrado.'
+        message: 'No autorizado - Usuario no encontrado'
       });
     }
 
-    // Agregar información del usuario a la request
+    if (!user.Activo) {
+      return res.status(401).json({
+        success: false,
+        message: 'No autorizado - Usuario inactivo'
+      });
+    }
+
+    // Agregar usuario a req
     req.user = {
       id: user.ID,
       usuario: user.Usuario,
-      rol: user.Rol
+      rol: user.Rol,
+      rolId: user.RolID
     };
 
     next();
   } catch (error) {
+    console.error('Error en autenticación:', error);
     return res.status(401).json({
       success: false,
-      message: 'Error de autenticación.'
+      message: 'No autorizado - Error de autenticación'
     });
   }
 };

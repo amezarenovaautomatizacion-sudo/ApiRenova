@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { hashPassword } = require('../utils/bcrypt');
 
 const User = {
   findByEmail: async (email) => {
@@ -32,15 +33,31 @@ const User = {
     }
   },
 
-  create: async (usuario, contrasenia, rolId) => {
+  findByIdWithPassword: async (id) => {
     try {
-      // Obtener nombre del rol
+      const [rows] = await pool.query(
+        `SELECT u.*, r.Nombre as RolNombre, r.Nivel as RolNivel
+         FROM usuarios u
+         LEFT JOIN roles r ON u.RolID = r.ID
+         WHERE u.ID = ? AND u.Activo = TRUE`,
+        [id]
+      );
+      return rows[0] || null;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  create: async (usuario, contrasenia, rolId = 2) => {
+    try {
       const [rol] = await pool.query('SELECT Nombre FROM roles WHERE ID = ?', [rolId]);
       const rolNombre = rol[0]?.Nombre || 'employee';
 
+      const hashedPassword = await hashPassword(contrasenia);
+
       const [result] = await pool.query(
         'INSERT INTO usuarios (Usuario, Contrasenia, Rol, RolID) VALUES (?, ?, ?, ?)',
-        [usuario, contrasenia, rolNombre, rolId]
+        [usuario, hashedPassword, rolNombre, rolId]
       );
       return { 
         id: result.insertId, 
@@ -53,15 +70,41 @@ const User = {
     }
   },
 
+  updatePassword: async (id, nuevaContrasenia) => {
+    try {
+      const hashedPassword = await hashPassword(nuevaContrasenia);
+
+      const [result] = await pool.query(
+        'UPDATE usuarios SET Contrasenia = ? WHERE ID = ?',
+        [hashedPassword, id]
+      );
+      
+      return result.affectedRows > 0;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   updateRol: async (id, rolId) => {
     try {
-      // Obtener nombre del rol
       const [rol] = await pool.query('SELECT Nombre FROM roles WHERE ID = ?', [rolId]);
       const rolNombre = rol[0]?.Nombre || 'employee';
 
       const [result] = await pool.query(
         'UPDATE usuarios SET Rol = ?, RolID = ? WHERE ID = ?',
         [rolNombre, rolId, id]
+      );
+      return result.affectedRows > 0;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  deactivateUser: async (id) => {
+    try {
+      const [result] = await pool.query(
+        'UPDATE usuarios SET Activo = FALSE WHERE ID = ?',
+        [id]
       );
       return result.affectedRows > 0;
     } catch (error) {
