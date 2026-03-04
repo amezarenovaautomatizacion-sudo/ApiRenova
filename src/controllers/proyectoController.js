@@ -3,7 +3,6 @@ const Proyecto = require('../models/proyectoModel');
 const empleadoHelper = require('../utils/empleadoHelper');
 
 const proyectoController = {
-  // Crear nuevo proyecto
   crearProyecto: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -72,14 +71,12 @@ const proyectoController = {
     }
   },
 
-  // Eliminar proyecto (lógica)
   eliminarProyecto: async (req, res, next) => {
     try {
       const { id } = req.params;
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
 
-      // Verificar que el usuario tenga permisos (solo admin o jefe del proyecto)
       const proyecto = await Proyecto.obtenerPorId(id, usuarioId, usuarioRol);
       if (!proyecto) {
         return res.status(404).json({
@@ -112,7 +109,6 @@ const proyectoController = {
     }
   },
 
-  // Obtener proyecto por ID
   obtenerProyecto: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -128,7 +124,6 @@ const proyectoController = {
         });
       }
 
-      // Obtener estadísticas adicionales
       const [estadisticas] = await req.app.locals.db.query(`
         SELECT 
           COUNT(DISTINCT t.ID) as total_tareas,
@@ -161,7 +156,6 @@ const proyectoController = {
     }
   },
 
-  // Listar proyectos
   listarProyectos: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -198,7 +192,6 @@ const proyectoController = {
     }
   },
 
-  // Actualizar proyecto
   actualizarProyecto: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -244,7 +237,6 @@ const proyectoController = {
     }
   },
 
-  // Cambiar estado del proyecto
   cambiarEstadoProyecto: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -291,7 +283,6 @@ const proyectoController = {
     }
   },
 
-  // Asignar empleado a proyecto
   asignarEmpleado: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
@@ -314,8 +305,9 @@ const proyectoController = {
         });
       }
 
-      const esAdmin = usuarioRol === 'admin';
       const miEmpleadoId = await empleadoHelper.obtenerEmpleadoId(usuarioId);
+      
+      const esAdmin = usuarioRol === 'admin';
       const esJefeProyecto = proyecto.JefeProyectoID === miEmpleadoId;
 
       if (!esAdmin && !esJefeProyecto) {
@@ -326,11 +318,37 @@ const proyectoController = {
       }
 
       if (!esAdmin) {
-        const esSubordinado = await empleadoHelper.esJefeDeEmpleado(proyecto.JefeProyectoID, empleadoId);
-        if (!esSubordinado) {
-          return res.status(403).json({
+        const [empleado] = await req.app.locals.db.query(
+          `SELECT e.ID, e.NombreCompleto 
+          FROM empleados e
+          INNER JOIN usuarios u ON e.UsuarioID = u.ID
+          WHERE e.ID = ? AND u.Activo = 1`,
+          [empleadoId]
+        );
+        
+        if (empleado.length === 0) {
+          return res.status(400).json({
             success: false,
-            message: 'Solo puedes asignar empleados que estén bajo tu supervisión'
+            message: 'El empleado no existe o no está activo'
+          });
+        }
+
+        if (parseInt(empleadoId) === proyecto.JefeProyectoID) {
+          return res.status(400).json({
+            success: false,
+            message: 'El jefe del proyecto ya está asignado automáticamente'
+          });
+        }
+
+        const [yaAsignado] = await req.app.locals.db.query(
+          'SELECT ID FROM proyecto_empleados WHERE ProyectoID = ? AND EmpleadoID = ? AND Activo = 1',
+          [proyectoId, empleadoId]
+        );
+
+        if (yaAsignado.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'El empleado ya está asignado a este proyecto'
           });
         }
       }
@@ -354,7 +372,6 @@ const proyectoController = {
     }
   },
 
-  // Quitar empleado de proyecto
   quitarEmpleado: async (req, res, next) => {
     try {
       const { id: proyectoId, empleadoId } = req.params;
@@ -399,7 +416,6 @@ const proyectoController = {
     }
   },
 
-  // Listar empleados del proyecto
   listarEmpleadosProyecto: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
@@ -424,7 +440,6 @@ const proyectoController = {
     }
   },
 
-  // Obtener empleados disponibles para asignar (CON DOS MODOS)
   obtenerEmpleadosDisponibles: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
@@ -433,11 +448,10 @@ const proyectoController = {
       const { 
         departamentoId, 
         search = '', 
-        modo = 'supervisados',
+        modo = 'todos',
         incluirAsignados = false 
       } = req.query;
 
-      // Verificar acceso al proyecto
       const proyecto = await Proyecto.obtenerPorId(proyectoId, usuarioId, usuarioRol);
       if (!proyecto) {
         return res.status(404).json({
@@ -450,7 +464,6 @@ const proyectoController = {
       const miEmpleadoId = await empleadoHelper.obtenerEmpleadoId(usuarioId);
       const esJefeProyecto = proyecto.JefeProyectoID === miEmpleadoId;
 
-      // Verificar permisos
       if (!esAdmin && !esJefeProyecto) {
         return res.status(403).json({
           success: false,
@@ -458,17 +471,10 @@ const proyectoController = {
         });
       }
 
-      // Validar modo según rol
-      let modoFinal = modo;
-      if (!esAdmin && modo === 'todos') {
-        // El jefe del proyecto puede ver todos los empleados pero con ciertas restricciones
-        modoFinal = 'todos';
-      }
-
       const filtros = {
         departamentoId,
         search,
-        modo: modoFinal,
+        modo,
         incluirAsignados: incluirAsignados === 'true'
       };
 
@@ -481,7 +487,7 @@ const proyectoController = {
 
       res.status(200).json({
         success: true,
-        message: `Empleados ${modoFinal === 'supervisados' ? 'bajo supervisión' : 'de la empresa'} recuperados`,
+        message: `Empleados ${modo === 'supervisados' ? 'bajo supervisión' : 'de la empresa'} recuperados`,
         data: resultado,
         meta: {
           proyecto: {
@@ -504,7 +510,6 @@ const proyectoController = {
     }
   },
 
-  // Buscar empleados generales de la empresa
   buscarEmpleadosGenerales: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
@@ -519,7 +524,6 @@ const proyectoController = {
         limit = 20
       } = req.query;
 
-      // Verificar acceso al proyecto
       const proyecto = await Proyecto.obtenerPorId(proyectoId, usuarioId, usuarioRol);
       if (!proyecto) {
         return res.status(404).json({
@@ -532,7 +536,6 @@ const proyectoController = {
       const miEmpleadoId = await empleadoHelper.obtenerEmpleadoId(usuarioId);
       const esJefeProyecto = proyecto.JefeProyectoID === miEmpleadoId;
 
-      // Verificar permisos
       if (!esAdmin && !esJefeProyecto) {
         return res.status(403).json({
           success: false,
@@ -577,17 +580,14 @@ const proyectoController = {
     }
   },
 
-  // Obtener todos los empleados del proyecto con estado
   obtenerEmpleadosProyectoConEstado: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
 
-      // Obtener empleados del proyecto
       const empleados = await Proyecto.obtenerEmpleados(proyectoId, usuarioId, usuarioRol);
 
-      // Agregar propiedad 'asignado' a cada empleado (ya están asignados por defecto)
       const empleadosConEstado = empleados.map(emp => ({
         ...emp,
         estadoAsignacion: 'asignado',
@@ -615,7 +615,6 @@ const proyectoController = {
     }
   },
 
-  // Obtener historial del proyecto
   obtenerHistorial: async (req, res, next) => {
     try {
       const { id: proyectoId } = req.params;
@@ -640,7 +639,6 @@ const proyectoController = {
     }
   },
 
-  // Obtener mis proyectos (donde soy jefe)
   obtenerMisProyectos: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -674,7 +672,6 @@ const proyectoController = {
     }
   },
 
-  // Obtener proyectos asignados (donde soy miembro)
   obtenerProyectosAsignados: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
