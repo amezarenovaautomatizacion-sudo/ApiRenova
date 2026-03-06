@@ -1,12 +1,11 @@
 const Aprobador = require('../models/aprobadorModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const aprobadorController = {
-  // Agregar usuario como aprobador
   agregarAprobador: async (req, res, next) => {
     try {
       const { usuarioId } = req.body;
 
-      // Validar campo requerido
       if (!usuarioId) {
         return res.status(400).json({
           success: false,
@@ -14,7 +13,6 @@ const aprobadorController = {
         });
       }
 
-      // Agregar como aprobador
       const resultado = await Aprobador.agregarAprobador(usuarioId);
 
       res.status(200).json({
@@ -40,12 +38,10 @@ const aprobadorController = {
     }
   },
 
-  // Quitar usuario como aprobador
   quitarAprobador: async (req, res, next) => {
     try {
       const { usuarioId } = req.params;
 
-      // Validar que el usuarioId sea numérico
       if (isNaN(usuarioId)) {
         return res.status(400).json({
           success: false,
@@ -53,7 +49,6 @@ const aprobadorController = {
         });
       }
 
-      // Quitar como aprobador
       const resultado = await Aprobador.quitarAprobador(parseInt(usuarioId));
 
       res.status(200).json({
@@ -73,14 +68,15 @@ const aprobadorController = {
     }
   },
 
-  // Obtener todos los aprobadores activos
   obtenerAprobadoresActivos: async (req, res, next) => {
     try {
       const aprobadores = await Aprobador.obtenerAprobadoresActivos();
+      
+      const aprobadoresFormateados = formatArrayDates(aprobadores, [], ['createdAt']);
 
       res.status(200).json({
         success: true,
-        data: aprobadores
+        data: aprobadoresFormateados
       });
 
     } catch (error) {
@@ -88,12 +84,10 @@ const aprobadorController = {
     }
   },
 
-  // Verificar si un usuario es aprobador
   verificarAprobador: async (req, res, next) => {
     try {
       const { usuarioId } = req.params;
 
-      // Validar que el usuarioId sea numérico
       if (isNaN(usuarioId)) {
         return res.status(400).json({
           success: false,

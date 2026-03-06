@@ -1,12 +1,11 @@
 const Vacaciones = require('../models/vacacionesModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const vacacionesController = {
-  // Obtener mis derechos vacacionales
   obtenerMisDerechos: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       
-      // Obtener EmpleadoID
       const [empleado] = await req.app.locals.db.query(
         'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
@@ -22,31 +21,39 @@ const vacacionesController = {
       const derechos = await Vacaciones.obtenerDerechosEmpleado(empleado[0].ID);
       
       if (!derechos) {
-        // Calcular derechos si no existen
         const calculo = await Vacaciones.calcularDerechos(empleado[0].ID);
+        const calculoFormateado = formatDateFields(
+          calculo,
+          ['primerAniversario', 'vigenciaHasta', 'proximoPeriodo', 'hoy'],
+          []
+        );
         return res.status(200).json({
           success: true,
-          data: calculo,
+          data: calculoFormateado,
           mensaje: 'Derechos calculados'
         });
       }
       
+      const derechosFormateados = formatDateFields(
+        derechos,
+        ['VigenciaHasta', 'ProximoPeriodo'],
+        ['createdAt', 'updatedAt']
+      );
+      
       res.status(200).json({
         success: true,
-        data: derechos
+        data: derechosFormateados
       });
     } catch (error) {
       next(error);
     }
   },
   
-  // Solicitar vacaciones
   solicitarVacaciones: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       const { fechaInicio, fechaFin, motivo, observaciones } = req.body;
       
-      // Validaciones
       if (!fechaInicio || !fechaFin || !motivo) {
         return res.status(400).json({
           success: false,
@@ -54,7 +61,6 @@ const vacacionesController = {
         });
       }
       
-      // Obtener EmpleadoID
       const [empleado] = await req.app.locals.db.query(
         'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
@@ -67,7 +73,6 @@ const vacacionesController = {
         });
       }
       
-      // Calcular días solicitados
       const inicio = new Date(fechaInicio);
       const fin = new Date(fechaFin);
       const diasSolicitados = Math.ceil((fin - inicio) / (1000 * 60 * 60 * 24)) + 1;
@@ -100,65 +105,66 @@ const vacacionesController = {
     }
   },
   
-  // Obtener mis solicitudes - CORREGIDO
-obtenerMisSolicitudes: async (req, res, next) => {
-  try {
-    const usuarioId = req.user.id;
-    const { tipo } = req.query;
-    
-    // Obtener EmpleadoID
-    const [empleado] = await req.app.locals.db.query(
-      'SELECT ID FROM empleados WHERE UsuarioID = ?',
-      [usuarioId]
-    );
-    
-    if (empleado.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Empleado no encontrado'
-      });
-    }
-    
-    const solicitudes = await Vacaciones.obtenerSolicitudesEmpleado(empleado[0].ID, tipo);
-    
-    res.status(200).json({
-      success: true,
-      data: solicitudes
-    });
-  } catch (error) {
-    next(error);
-  }
-},
-  
-  // Obtener solicitudes pendientes para aprobar
-  obtenerSolicitudesPendientes: async (req, res, next) => {
+  obtenerMisSolicitudes: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
+      const { tipo } = req.query;
       
-      console.log(`[obtenerSolicitudesPendientes] UsuarioID: ${usuarioId}`);
+      const [empleado] = await req.app.locals.db.query(
+        'SELECT ID FROM empleados WHERE UsuarioID = ?',
+        [usuarioId]
+      );
       
-      const solicitudes = await Vacaciones.obtenerSolicitudesPendientes(usuarioId);
+      if (empleado.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empleado no encontrado'
+        });
+      }
       
-      console.log(`Solicitudes pendientes encontradas: ${solicitudes.length}`);
+      const solicitudes = await Vacaciones.obtenerSolicitudesEmpleado(empleado[0].ID, tipo);
+      
+      const solicitudesFormateadas = formatArrayDates(
+        solicitudes,
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin', 'UltimaAprobacion'],
+        ['createdAt', 'updatedAt']
+      );
       
       res.status(200).json({
         success: true,
-        data: solicitudes
+        data: solicitudesFormateadas
       });
     } catch (error) {
-      console.error('Error en obtenerSolicitudesPendientes:', error);
       next(error);
     }
   },
   
-  // Aprobar/rechazar solicitud
+  obtenerSolicitudesPendientes: async (req, res, next) => {
+    try {
+      const usuarioId = req.user.id;
+      
+      const solicitudes = await Vacaciones.obtenerSolicitudesPendientes(usuarioId);
+      
+      const solicitudesFormateadas = formatArrayDates(
+        solicitudes,
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin', 'FechaAprobacion'],
+        ['createdAt', 'updatedAt']
+      );
+      
+      res.status(200).json({
+        success: true,
+        data: solicitudesFormateadas
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+  
   procesarAprobacion: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       const { aprobacionId } = req.params;
       const { estado, comentarios } = req.body;
-      
-      console.log(`[procesarAprobacion] UsuarioID: ${usuarioId}, AprobacionID: ${aprobacionId}, Estado: ${estado}`);
       
       if (!['aprobada', 'rechazado'].includes(estado)) {
         return res.status(400).json({
@@ -182,7 +188,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         data: resultado
       });
     } catch (error) {
-      console.error('Error en procesarAprobacion:', error);
       if (error.message.includes('No se encontró')) {
         return res.status(404).json({
           success: false,
@@ -193,7 +198,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
     }
   },
   
-  // Editar aprobación (cambiar de opinión)
   editarAprobacion: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -238,15 +242,11 @@ obtenerMisSolicitudes: async (req, res, next) => {
     }
   },
 
-  // Obtener mis solicitudes aprobadas
   obtenerMisSolicitudesAprobadas: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       const { tipo } = req.query;
       
-      console.log(`[obtenerMisSolicitudesAprobadas] UsuarioID: ${usuarioId}, Tipo: ${tipo}`);
-      
-      // Obtener EmpleadoID
       const [empleado] = await req.app.locals.db.query(
         'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
@@ -261,24 +261,25 @@ obtenerMisSolicitudes: async (req, res, next) => {
       
       const solicitudes = await Vacaciones.obtenerSolicitudesAprobadasEmpleado(empleado[0].ID, tipo);
       
-      console.log(`Solicitudes aprobadas encontradas: ${solicitudes.length}`);
+      const solicitudesFormateadas = formatArrayDates(
+        solicitudes,
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin', 'UltimaAprobacion'],
+        ['createdAt', 'updatedAt']
+      );
       
       res.status(200).json({
         success: true,
-        data: solicitudes
+        data: solicitudesFormateadas
       });
     } catch (error) {
-      console.error('Error en obtenerMisSolicitudesAprobadas:', error);
       next(error);
     }
   },
 
-  // Obtener todas las solicitudes aprobadas (para admin/manager)
   obtenerTodasSolicitudesAprobadas: async (req, res, next) => {
     try {
       const usuarioRol = req.user.rol;
       
-      // Solo admin y manager pueden ver todas las solicitudes aprobadas
       if (!['admin', 'manager'].includes(usuarioRol)) {
         return res.status(403).json({
           success: false,
@@ -286,14 +287,7 @@ obtenerMisSolicitudes: async (req, res, next) => {
         });
       }
       
-      const { 
-        empleadoId, 
-        tipo, 
-        fechaDesde, 
-        fechaHasta,
-        page = 1, 
-        limit = 10 
-      } = req.query;
+      const { empleadoId, tipo, fechaDesde, fechaHasta, page = 1, limit = 10 } = req.query;
       
       const filtros = {};
       if (empleadoId) filtros.empleadoId = empleadoId;
@@ -301,23 +295,25 @@ obtenerMisSolicitudes: async (req, res, next) => {
       if (fechaDesde) filtros.fechaDesde = fechaDesde;
       if (fechaHasta) filtros.fechaHasta = fechaHasta;
       
-      // Calcular offset para paginación
       const offset = (page - 1) * limit;
       filtros.limit = parseInt(limit);
       filtros.offset = offset;
       
-      // Obtener solicitudes y total
       const [solicitudes, total] = await Promise.all([
         Vacaciones.obtenerTodasSolicitudesAprobadas(filtros),
         Vacaciones.contarSolicitudesAprobadas(filtros)
       ]);
       
-      console.log(`Total solicitudes aprobadas: ${total}`);
+      const solicitudesFormateadas = formatArrayDates(
+        solicitudes,
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin', 'FechaUltimaAprobacion'],
+        ['createdAt', 'updatedAt']
+      );
       
       res.status(200).json({
         success: true,
         data: {
-          solicitudes,
+          solicitudes: solicitudesFormateadas,
           pagination: {
             page: parseInt(page),
             limit: parseInt(limit),
@@ -327,12 +323,10 @@ obtenerMisSolicitudes: async (req, res, next) => {
         }
       });
     } catch (error) {
-      console.error('Error en obtenerTodasSolicitudesAprobadas:', error);
       next(error);
     }
   },
 
-  // Obtener solicitudes por estado
   obtenerSolicitudesPorEstado: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -340,9 +334,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
       const { estado } = req.params;
       const { tipo } = req.query;
       
-      console.log(`[obtenerSolicitudesPorEstado] Estado: ${estado}, Tipo: ${tipo}`);
-      
-      // Validar estado
       const estadosValidos = ['pendiente', 'aprobada', 'rechazada', 'cancelada'];
       if (!estadosValidos.includes(estado)) {
         return res.status(400).json({
@@ -354,7 +345,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
       let solicitudes = [];
       
       if (usuarioRol === 'employee') {
-        // Employee solo puede ver sus propias solicitudes
         const [empleado] = await req.app.locals.db.query(
           'SELECT ID FROM empleados WHERE UsuarioID = ?',
           [usuarioId]
@@ -370,12 +360,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         solicitudes = await Vacaciones.obtenerSolicitudesPorEstado(empleado[0].ID, estado, tipo);
         
       } else if (['admin', 'manager'].includes(usuarioRol)) {
-        // Admin y manager pueden ver todas las solicitudes de ese estado
-        // Para simplificar, usaremos obtenerTodasSolicitudesAprobadas con filtro de estado
-        const filtros = { estado: estado };
-        if (tipo) filtros.tipo = tipo;
-        
-        // Para admin/manager, usar función diferente que obtiene todas
         const [rows] = await req.app.locals.db.query(
           `SELECT 
             s.*,
@@ -392,28 +376,27 @@ obtenerMisSolicitudes: async (req, res, next) => {
         solicitudes = rows;
       }
       
-      console.log(`Solicitudes en estado "${estado}" encontradas: ${solicitudes.length}`);
+      const solicitudesFormateadas = formatArrayDates(
+        solicitudes,
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin'],
+        ['createdAt', 'updatedAt']
+      );
       
       res.status(200).json({
         success: true,
-        data: solicitudes
+        data: solicitudesFormateadas
       });
     } catch (error) {
-      console.error('Error en obtenerSolicitudesPorEstado:', error);
       next(error);
     }
   },
 
-  // Obtener detalle completo de una solicitud (incluye aprobaciones)
   obtenerDetalleSolicitud: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
       const { solicitudId } = req.params;
       
-      console.log(`[obtenerDetalleSolicitud] SolicitudID: ${solicitudId}`);
-      
-      // 1. Obtener información básica de la solicitud
       const [solicitud] = await req.app.locals.db.query(
         `SELECT 
           s.*,
@@ -433,7 +416,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         });
       }
       
-      // 2. Verificar permisos de acceso
       const esDueno = solicitud[0].EmpleadoUsuarioID === usuarioId;
       const esAdminManager = ['admin', 'manager'].includes(usuarioRol);
       
@@ -444,7 +426,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         });
       }
       
-      // 3. Obtener aprobaciones de esta solicitud
       const [aprobaciones] = await req.app.locals.db.query(
         `SELECT 
           aps.*,
@@ -458,7 +439,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         [solicitudId]
       );
       
-      // 4. Obtener historial de esta solicitud
       const [historial] = await req.app.locals.db.query(
         `SELECT 
           hs.*,
@@ -470,7 +450,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         [solicitudId]
       );
       
-      // 5. Obtener incidencia relacionada si existe
       const [incidencia] = await req.app.locals.db.query(
         `SELECT 
           i.*,
@@ -481,13 +460,35 @@ obtenerMisSolicitudes: async (req, res, next) => {
         [solicitudId]
       );
       
+      const solicitudFormateada = formatDateFields(
+        solicitud[0],
+        ['FechaSolicitud', 'FechaInicio', 'FechaFin'],
+        ['createdAt', 'updatedAt']
+      );
+      
+      const aprobacionesFormateadas = formatArrayDates(
+        aprobaciones,
+        ['FechaAprobacion'],
+        ['createdAt', 'updatedAt']
+      );
+      
+      const historialFormateado = formatArrayDates(
+        historial,
+        [],
+        ['createdAt']
+      );
+      
+      const incidenciaFormateada = incidencia.length > 0 
+        ? formatDateFields(incidencia[0], ['FechaIncidencia'], ['createdAt', 'updatedAt'])
+        : null;
+      
       res.status(200).json({
         success: true,
         data: {
-          solicitud: solicitud[0],
-          aprobaciones,
-          historial,
-          incidencia: incidencia.length > 0 ? incidencia[0] : null,
+          solicitud: solicitudFormateada,
+          aprobaciones: aprobacionesFormateadas,
+          historial: historialFormateado,
+          incidencia: incidenciaFormateada,
           estadisticas: {
             totalAprobaciones: aprobaciones.length,
             aprobadas: aprobaciones.filter(a => a.Estado === 'aprobada').length,
@@ -497,7 +498,6 @@ obtenerMisSolicitudes: async (req, res, next) => {
         }
       });
     } catch (error) {
-      console.error('Error en obtenerDetalleSolicitud:', error);
       next(error);
     }
   }

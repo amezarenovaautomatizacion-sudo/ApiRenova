@@ -1,8 +1,8 @@
 const PermisosModel = require('../models/permisosModel');
 const Vacaciones = require('../models/vacacionesModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const permisosController = {
-  // Solicitar permiso
   solicitarPermiso: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -15,7 +15,6 @@ const permisosController = {
         });
       }
       
-      // Obtener EmpleadoID
       const [empleado] = await req.app.locals.db.query(
         'SELECT ID FROM empleados WHERE UsuarioID = ?',
         [usuarioId]
@@ -31,7 +30,7 @@ const permisosController = {
       const solicitudData = {
         empleadoId: empleado[0].ID,
         motivo,
-        fechaInicio,
+        fechaInicio: new Date(fechaInicio).toISOString().split('T')[0],
         conGoce,
         observaciones,
         creadoPor: usuarioId
@@ -55,16 +54,21 @@ const permisosController = {
     }
   },
   
-  // Obtener permisos pendientes para aprobar
   obtenerPermisosPendientes: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       
       const permisos = await PermisosModel.obtenerPermisosPendientes(usuarioId);
       
+      const permisosFormateados = formatArrayDates(
+        permisos,
+        ['FechaInicio', 'FechaSolicitud'],
+        ['createdAt', 'updatedAt']
+      );
+      
       res.status(200).json({
         success: true,
-        data: permisos
+        data: permisosFormateados
       });
     } catch (error) {
       next(error);

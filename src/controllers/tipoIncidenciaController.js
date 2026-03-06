@@ -1,21 +1,22 @@
 const TipoIncidencia = require('../models/tipoIncidenciaModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const tipoIncidenciaController = {
-  // Obtener todos los tipos activos
   obtenerTiposActivos: async (req, res, next) => {
     try {
       const tipos = await TipoIncidencia.findAll();
       
+      const tiposFormateados = formatArrayDates(tipos, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
-        data: tipos
+        data: tiposFormateados
       });
     } catch (error) {
       next(error);
     }
   },
 
-  // Obtener todos los tipos (incluyendo inactivos - solo admin)
   obtenerTodosTipos: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -27,16 +28,17 @@ const tipoIncidenciaController = {
 
       const tipos = await TipoIncidencia.findAllWithInactive();
       
+      const tiposFormateados = formatArrayDates(tipos, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
-        data: tipos
+        data: tiposFormateados
       });
     } catch (error) {
       next(error);
     }
   },
 
-  // Obtener tipo por ID
   obtenerTipo: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -50,16 +52,17 @@ const tipoIncidenciaController = {
         });
       }
       
+      const tipoFormateado = formatDateFields(tipo, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
-        data: tipo
+        data: tipoFormateado
       });
     } catch (error) {
       next(error);
     }
   },
 
-  // Crear nuevo tipo (solo admin)
   crearTipo: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -80,10 +83,12 @@ const tipoIncidenciaController = {
       
       const nuevoTipo = await TipoIncidencia.create(nombre, descripcion);
       
+      const tipoFormateado = formatDateFields(nuevoTipo, [], ['createdAt', 'updatedAt']);
+
       res.status(201).json({
         success: true,
         message: 'Tipo de incidencia creado exitosamente',
-        data: nuevoTipo
+        data: tipoFormateado
       });
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
@@ -96,7 +101,6 @@ const tipoIncidenciaController = {
     }
   },
 
-  // Actualizar tipo (solo admin)
   actualizarTipo: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -116,7 +120,6 @@ const tipoIncidenciaController = {
         });
       }
       
-      // Verificar que existe
       const tipoExistente = await TipoIncidencia.findById(id);
       if (!tipoExistente) {
         return res.status(404).json({
@@ -149,7 +152,6 @@ const tipoIncidenciaController = {
     }
   },
 
-  // Activar/desactivar tipo (solo admin)
   toggleActivo: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -169,7 +171,6 @@ const tipoIncidenciaController = {
         });
       }
       
-      // Verificar que existe
       const tipoExistente = await TipoIncidencia.findById(id);
       if (!tipoExistente) {
         return res.status(404).json({

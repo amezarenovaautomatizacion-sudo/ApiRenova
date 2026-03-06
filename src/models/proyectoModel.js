@@ -145,95 +145,110 @@ const Proyecto = {
     }
   },
 
-  // Listar proyectos con filtros según rol
-  listar: async (filtros) => {
-    const {
-      usuarioId,
-      usuarioRol,
-      estado,
-      jefeProyectoId,
-      page = 1,
-      limit = 10,
-      soloMisProyectos = false,
-      search = ''
-    } = filtros;
+// Método listar
 
-    const offset = (page - 1) * limit;
-    let whereClause = 'p.Activo = 1';
-    const queryParams = [];
+listar: async (filtros) => {
+  const {
+    usuarioId,
+    usuarioRol,
+    estado,
+    jefeProyectoId,
+    page = 1,
+    limit = 10,
+    soloMisProyectos = false,
+    search = ''
+  } = filtros;
 
-    const [empleado] = await pool.query(`
-      SELECT ID FROM empleados WHERE UsuarioID = ?
-    `, [usuarioId]);
-    
-    const empleadoId = empleado[0]?.ID;
+  const offset = (page - 1) * limit;
+  let whereClause = 'p.Activo = 1';
+  const queryParams = [];
 
-    if (estado) {
-      whereClause += ' AND p.Estado = ?';
-      queryParams.push(estado);
-    }
+  // Obtener ID del empleado del usuario
+  const [empleado] = await pool.query(
+    'SELECT ID FROM empleados WHERE UsuarioID = ?',
+    [usuarioId]
+  );
+  
+  const empleadoId = empleado[0]?.ID;
 
-    if (jefeProyectoId) {
+  if (estado) {
+    whereClause += ' AND p.Estado = ?';
+    queryParams.push(estado);
+  }
+
+  if (jefeProyectoId) {
+    whereClause += ' AND p.JefeProyectoID = ?';
+    queryParams.push(jefeProyectoId);
+  }
+
+  if (search) {
+    whereClause += ' AND (p.Nombre LIKE ? OR p.Descripcion LIKE ?)';
+    queryParams.push(`%${search}%`, `%${search}%`);
+  }
+
+  if (usuarioRol !== 'admin') {
+    if (soloMisProyectos) {
       whereClause += ' AND p.JefeProyectoID = ?';
-      queryParams.push(jefeProyectoId);
+      queryParams.push(empleadoId);
+    } else {
+      whereClause += ` AND (
+        p.JefeProyectoID = ?
+        OR p.ID IN (
+          SELECT pe.ProyectoID 
+          FROM proyecto_empleados pe
+          WHERE pe.EmpleadoID = ? AND pe.Activo = 1
+        )
+      )`;
+      queryParams.push(empleadoId, empleadoId);
     }
+  }
 
-    if (search) {
-      whereClause += ' AND (p.Nombre LIKE ? OR p.Descripcion LIKE ?)';
-      queryParams.push(`%${search}%`, `%${search}%`);
+  // Consulta para obtener los proyectos
+  const query = `
+    SELECT 
+      p.*,
+      e.NombreCompleto as JefeProyectoNombre,
+      e.CorreoElectronico as JefeProyectoEmail,
+      COUNT(DISTINCT pe.EmpleadoID) as TotalEmpleados,
+      COUNT(DISTINCT t.ID) as TotalTareas,
+      COUNT(DISTINCT CASE WHEN t.Estado = 'realizada' THEN t.ID END) as TareasCompletadas
+    FROM proyectos p
+    LEFT JOIN empleados e ON p.JefeProyectoID = e.ID
+    LEFT JOIN proyecto_empleados pe ON p.ID = pe.ProyectoID AND pe.Activo = 1
+    LEFT JOIN tareas t ON p.ID = t.ProyectoID AND t.Activo = 1
+    WHERE ${whereClause}
+    GROUP BY p.ID
+    ORDER BY p.createdAt DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  // Clonar parámetros para la consulta de count
+  const countParams = [...queryParams];
+
+  // Agregar parámetros de paginación
+  const finalParams = [...queryParams, limit, offset];
+
+  const [rows] = await pool.query(query, finalParams);
+
+  // Consulta para contar total (sin paginación)
+  const countQuery = `
+    SELECT COUNT(DISTINCT p.ID) as total
+    FROM proyectos p
+    WHERE ${whereClause}
+  `;
+
+  const [countResult] = await pool.query(countQuery, queryParams);
+
+  return {
+    proyectos: rows,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: countResult[0]?.total || 0,
+      totalPages: Math.ceil((countResult[0]?.total || 0) / limit)
     }
-
-    if (usuarioRol !== 'admin') {
-      if (soloMisProyectos) {
-        whereClause += ' AND p.JefeProyectoID = ?';
-        queryParams.push(empleadoId);
-      } else {
-        whereClause += ` AND (
-          p.JefeProyectoID = ?
-          OR p.ID IN (
-            SELECT pe.ProyectoID 
-            FROM proyecto_empleados pe
-            WHERE pe.EmpleadoID = ? AND pe.Activo = 1
-          )
-        )`;
-        queryParams.push(empleadoId, empleadoId);
-      }
-    }
-
-    const [rows] = await pool.query(`
-      SELECT 
-        p.*,
-        e.NombreCompleto as JefeProyectoNombre,
-        e.CorreoElectronico as JefeProyectoEmail,
-        COUNT(DISTINCT pe.EmpleadoID) as TotalEmpleados,
-        COUNT(DISTINCT t.ID) as TotalTareas,
-        COUNT(DISTINCT CASE WHEN t.Estado = 'realizada' THEN t.ID END) as TareasCompletadas
-      FROM proyectos p
-      LEFT JOIN empleados e ON p.JefeProyectoID = e.ID
-      LEFT JOIN proyecto_empleados pe ON p.ID = pe.ProyectoID AND pe.Activo = 1
-      LEFT JOIN tareas t ON p.ID = t.ProyectoID AND t.Activo = 1
-      WHERE ${whereClause}
-      GROUP BY p.ID
-      ORDER BY p.createdAt DESC
-      LIMIT ? OFFSET ?
-    `, [...queryParams, limit, offset]);
-
-    const [countResult] = await pool.query(`
-      SELECT COUNT(DISTINCT p.ID) as total
-      FROM proyectos p
-      WHERE ${whereClause}
-    `, queryParams);
-
-    return {
-      proyectos: rows,
-      pagination: {
-        page,
-        limit,
-        total: countResult[0].total,
-        totalPages: Math.ceil(countResult[0].total / limit)
-      }
-    };
-  },
+  };
+},
 
   // Actualizar proyecto
   actualizar: async (proyectoId, proyectoData, usuarioId) => {

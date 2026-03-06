@@ -1,49 +1,41 @@
 const Notificacion = require('../models/notificacionModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const notificacionController = {
-  // Obtener notificaciones personales del usuario
-obtenerMisNotificaciones: async (req, res, next) => {
-  try {
-    const usuarioId = req.user.id;
-    const { 
-      tipo, 
-      estado,  // ← CAMBIO: eliminar el valor por defecto 'no_vista'
-      importante, 
-      page = 1, 
-      limit = 20 
-    } = req.query;
-    
-    const filtros = {
-      usuarioId,
-      tipo,
-      estado: estado || '',
-      importante: importante === 'true',
-      page: parseInt(page),
-      limit: parseInt(limit)
-    };
-
-    const resultado = await Notificacion.obtenerNotificacionesPersonales(filtros);
-
-    res.status(200).json({
-      success: true,
-      data: resultado
-    });
-
-  } catch (error) {
-    next(error);
-  }
-},
-
-  // Obtener resumen de notificaciones (contadores)
-  obtenerResumenNotificaciones: async (req, res, next) => {
+  obtenerMisNotificaciones: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
+      const { 
+        tipo, 
+        estado, 
+        importante, 
+        page = 1, 
+        limit = 20 
+      } = req.query;
       
-      const resumen = await Notificacion.obtenerResumenNotificaciones(usuarioId);
+      const filtros = {
+        usuarioId,
+        tipo,
+        estado: estado || '',
+        importante: importante === 'true',
+        page: parseInt(page),
+        limit: parseInt(limit)
+      };
+
+      const resultado = await Notificacion.obtenerNotificacionesPersonales(filtros);
+      
+      const notificacionesFormateadas = formatArrayDates(
+        resultado.notificaciones,
+        ['FechaVista', 'FechaEliminada', 'FechaExpiracion'],
+        ['createdAt', 'updatedAt']
+      );
 
       res.status(200).json({
         success: true,
-        data: resumen
+        data: {
+          notificaciones: notificacionesFormateadas,
+          pagination: resultado.pagination
+        }
       });
 
     } catch (error) {
@@ -51,7 +43,24 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Marcar notificación como vista
+  obtenerResumenNotificaciones: async (req, res, next) => {
+    try {
+      const usuarioId = req.user.id;
+      
+      const resumen = await Notificacion.obtenerResumenNotificaciones(usuarioId);
+      
+      const resumenFormateado = formatDateFields(resumen, ['ultima_notificacion'], []);
+
+      res.status(200).json({
+        success: true,
+        data: resumenFormateado
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  },
+
   marcarComoVista: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -72,11 +81,13 @@ obtenerMisNotificaciones: async (req, res, next) => {
           message: 'Notificación no encontrada o no pertenece al usuario'
         });
       }
+      
+      const resultadoFormateado = formatDateFields(resultado, ['FechaVista', 'FechaExpiracion'], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
         message: 'Notificación marcada como vista',
-        data: resultado
+        data: resultadoFormateado
       });
 
     } catch (error) {
@@ -84,7 +95,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Marcar notificación como leída
   marcarComoLeida: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -105,11 +115,13 @@ obtenerMisNotificaciones: async (req, res, next) => {
           message: 'Notificación no encontrada o no pertenece al usuario'
         });
       }
+      
+      const resultadoFormateado = formatDateFields(resultado, ['FechaVista', 'FechaExpiracion'], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
         message: 'Notificación marcada como leída',
-        data: resultado
+        data: resultadoFormateado
       });
 
     } catch (error) {
@@ -117,7 +129,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Eliminar notificación
   eliminarNotificacion: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -150,7 +161,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Marcar todas como vistas
   marcarTodasComoVistas: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -168,7 +178,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Obtener notificaciones generales
   obtenerNotificacionesGenerales: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -188,10 +197,19 @@ obtenerMisNotificaciones: async (req, res, next) => {
       };
 
       const resultado = await Notificacion.obtenerNotificacionesGenerales(filtros);
+      
+      const notificacionesFormateadas = formatArrayDates(
+        resultado.notificaciones,
+        ['FechaExpiracion', 'FechaVista'],
+        ['createdAt', 'updatedAt']
+      );
 
       res.status(200).json({
         success: true,
-        data: resultado
+        data: {
+          notificaciones: notificacionesFormateadas,
+          pagination: resultado.pagination
+        }
       });
 
     } catch (error) {
@@ -199,7 +217,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Marcar notificación general como vista
   marcarGeneralComoVista: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -232,7 +249,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Crear notificación general (solo admin)
   crearNotificacionGeneral: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -269,11 +285,13 @@ obtenerMisNotificaciones: async (req, res, next) => {
       };
 
       const resultado = await Notificacion.crearNotificacionGeneral(notificacionData);
+      
+      const resultadoFormateado = formatDateFields(resultado, ['FechaExpiracion'], ['createdAt', 'updatedAt']);
 
       res.status(201).json({
         success: true,
         message: 'Notificación general creada exitosamente',
-        data: resultado
+        data: resultadoFormateado
       });
 
     } catch (error) {
@@ -281,7 +299,7 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-    crearNotificacionPersonal: async (req, res, next) => {
+  crearNotificacionPersonal: async (req, res, next) => {
     try {
       const { usuarioId, titulo, mensaje, tipoNotificacionId = 1, vigenciaDias = 30 } = req.body;
       
@@ -299,11 +317,13 @@ obtenerMisNotificaciones: async (req, res, next) => {
         mensaje,
         vigenciaDias
       });
+      
+      const resultadoFormateado = formatDateFields(resultado, ['FechaExpiracion'], ['createdAt', 'updatedAt']);
 
       res.status(201).json({
         success: true,
         message: 'Notificación personal creada',
-        data: resultado
+        data: resultadoFormateado
       });
 
     } catch (error) {
@@ -311,11 +331,11 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-    obtenerUltimaNotificacion: async (req, res, next) => {
+  obtenerUltimaNotificacion: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
       
-      const [notificaciones] = await pool.query(`
+      const [notificaciones] = await req.app.locals.db.query(`
         SELECT 
           np.ID,
           np.Titulo,
@@ -332,10 +352,14 @@ obtenerMisNotificaciones: async (req, res, next) => {
         ORDER BY np.createdAt DESC
         LIMIT 1
       `, [usuarioId]);
+      
+      const notificacionFormateada = notificaciones[0] 
+        ? formatDateFields(notificaciones[0], [], ['createdAt'])
+        : null;
 
       res.status(200).json({
         success: true,
-        data: notificaciones[0] || null
+        data: notificacionFormateada
       });
 
     } catch (error) {
@@ -343,14 +367,15 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Obtener tipos de notificación
   obtenerTiposNotificacion: async (req, res, next) => {
     try {
       const tipos = await Notificacion.obtenerTiposNotificacion();
+      
+      const tiposFormateados = formatArrayDates(tipos, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
-        data: tipos
+        data: tiposFormateados
       });
 
     } catch (error) {
@@ -358,7 +383,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Obtener configuraciones de notificaciones
   obtenerConfiguraciones: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -369,10 +393,12 @@ obtenerMisNotificaciones: async (req, res, next) => {
       }
 
       const configuraciones = await Notificacion.obtenerConfiguraciones();
+      
+      const configuracionesFormateadas = formatArrayDates(configuraciones, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
-        data: configuraciones
+        data: configuracionesFormateadas
       });
 
     } catch (error) {
@@ -380,7 +406,6 @@ obtenerMisNotificaciones: async (req, res, next) => {
     }
   },
 
-  // Actualizar configuración
   actualizarConfiguracion: async (req, res, next) => {
     try {
       if (req.user.rol !== 'admin') {
@@ -408,11 +433,13 @@ obtenerMisNotificaciones: async (req, res, next) => {
           message: 'Configuración no encontrada'
         });
       }
+      
+      const resultadoFormateado = formatDateFields(resultado, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
         message: 'Configuración actualizada',
-        data: resultado
+        data: resultadoFormateado
       });
 
     } catch (error) {

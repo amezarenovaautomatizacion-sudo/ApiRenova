@@ -1,7 +1,7 @@
 const HorasExtras = require('../models/horasExtrasModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const horasExtrasController = {
-  // Solicitar horas extras (solo manager/admin)
   solicitarHorasExtras: async (req, res, next) => {
     try {
       const usuarioId = req.user.id;
@@ -18,7 +18,7 @@ const horasExtrasController = {
       const solicitudData = {
         empleadoId,
         motivo,
-        fechaInicio,
+        fechaInicio: new Date(fechaInicio).toISOString().split('T')[0],
         horasSolicitadas: parseFloat(horasSolicitadas),
         observaciones,
         creadoPor: usuarioId
@@ -48,12 +48,10 @@ const horasExtrasController = {
     }
   },
   
-  // Obtener reporte de horas extras
   obtenerReporteHorasExtras: async (req, res, next) => {
     try {
       const usuarioRol = req.user.rol;
       
-      // Solo admin y manager pueden ver reportes
       if (!['admin', 'manager'].includes(usuarioRol)) {
         return res.status(403).json({
           success: false,
@@ -71,21 +69,22 @@ const horasExtrasController = {
       
       const reporte = await HorasExtras.obtenerReporteHorasExtras(filtros);
       
-      // Calcular totales
-      const totalHoras = reporte.reduce((sum, item) => sum + (parseFloat(item.HorasSolicitadas) || 0), 0);
-      const totalAprobadas = reporte.filter(item => item.Estado === 'aprobada').length;
-      const totalPendientes = reporte.filter(item => item.Estado === 'pendiente').length;
+      const reporteFormateado = formatArrayDates(reporte, ['FechaInicio', 'FechaSolicitud'], ['createdAt', 'updatedAt']);
+      
+      const totalHoras = reporteFormateado.reduce((sum, item) => sum + (parseFloat(item.HorasSolicitadas) || 0), 0);
+      const totalAprobadas = reporteFormateado.filter(item => item.Estado === 'aprobada').length;
+      const totalPendientes = reporteFormateado.filter(item => item.Estado === 'pendiente').length;
       
       res.status(200).json({
         success: true,
         data: {
-          reporte,
+          reporte: reporteFormateado,
           estadisticas: {
-            totalSolicitudes: reporte.length,
+            totalSolicitudes: reporteFormateado.length,
             totalHoras,
             aprobadas: totalAprobadas,
             pendientes: totalPendientes,
-            rechazadas: reporte.length - totalAprobadas - totalPendientes
+            rechazadas: reporteFormateado.length - totalAprobadas - totalPendientes
           }
         }
       });

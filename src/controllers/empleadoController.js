@@ -1,9 +1,9 @@
 const Empleado = require('../models/empleadoModel');
 const Catalogo = require('../models/catalogoModel');
 const { hashPassword } = require('../utils/bcrypt');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const empleadoController = {
-  // Crear nuevo empleado
   crearEmpleado: async (req, res, next) => {
     try {
       const {
@@ -80,10 +80,12 @@ const empleadoController = {
 
       const nuevoEmpleado = await Empleado.create(empleadoData);
 
+      const empleadoFormateado = formatDateFields(nuevoEmpleado, ['FechaIngreso', 'FechaNacimiento'], ['createdAt', 'updatedAt']);
+
       res.status(201).json({
         success: true,
         message: 'Empleado creado exitosamente',
-        data: nuevoEmpleado
+        data: empleadoFormateado
       });
 
     } catch (error) {
@@ -119,7 +121,6 @@ const empleadoController = {
     }
   },
 
-  // Obtener todos los empleados (filtrado por rol)
   obtenerEmpleados: async (req, res, next) => {
     try {
       const page = parseInt(req.query.page) || 1;
@@ -135,21 +136,18 @@ const empleadoController = {
 
       let whereClause = 'WHERE u.Activo = TRUE';
       
-      // Agregar búsqueda si existe
       if (search) {
         whereClause += ` AND (e.NombreCompleto LIKE ? OR e.CorreoElectronico LIKE ?)`;
         queryParams.push(`%${search}%`, `%${search}%`);
         countParams.push(`%${search}%`, `%${search}%`);
       }
       
-      // Agregar filtro por rol si existe
       if (rolFilter) {
         whereClause += ` AND e.RolApp = ?`;
         queryParams.push(rolFilter);
         countParams.push(rolFilter);
       }
 
-      // Agregar parámetros de paginación
       queryParams.push(limit, (page - 1) * limit);
 
       if (usuarioRol === 'admin') {
@@ -197,10 +195,12 @@ const empleadoController = {
       const [rows] = await req.app.locals.db.query(query, queryParams);
       const [countResult] = await req.app.locals.db.query(countQuery, countParams);
 
+      const empleadosFormateados = formatArrayDates(rows, ['FechaIngreso', 'FechaNacimiento'], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
         data: {
-          empleados: rows,
+          empleados: empleadosFormateados,
           pagination: {
             page,
             limit,
@@ -215,150 +215,138 @@ const empleadoController = {
     }
   },
 
-// Obtener empleado por ID (filtrado por rol)
-obtenerEmpleado: async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const usuarioRol = req.user.rol;
+  obtenerEmpleado: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const usuarioRol = req.user.rol;
 
-    let empleado;
+      let empleado;
 
-    if (usuarioRol === 'admin') {
-      const [rows] = await req.app.locals.db.query(
-        `
-        SELECT e.*, p.Nombre AS PuestoNombre, p.Descripcion AS PuestoDescripcion
-        FROM empleados e
-        LEFT JOIN puestos p ON e.PuestoID = p.ID
-        WHERE e.ID = ?
-        `,
-        [id]
-      );
-      empleado = rows[0];
-    } else {
-      const [rows] = await req.app.locals.db.query(
-        `
-        SELECT
-          e.ID,
-          e.NombreCompleto,
-          e.CorreoElectronico,
-          e.RolApp,
-          e.FechaIngreso,
-          e.FechaNacimiento,
-          e.Celular,
-          e.TelefonoEmergencia,
-          p.Nombre AS PuestoNombre,
-          u.Activo AS UsuarioActivo
-        FROM empleados e
-        LEFT JOIN puestos p ON e.PuestoID = p.ID
-        LEFT JOIN usuarios u ON e.UsuarioID = u.ID
-        WHERE e.ID = ?
-        `,
-        [id]
-      );
-      empleado = rows[0];
-
-      if (empleado && empleado.FechaNacimiento) {
-        const fecha = new Date(empleado.FechaNacimiento);
-        empleado.FechaNacimiento = fecha.toISOString().split('T')[0];
+      if (usuarioRol === 'admin') {
+        const [rows] = await req.app.locals.db.query(
+          `
+          SELECT e.*, p.Nombre AS PuestoNombre, p.Descripcion AS PuestoDescripcion
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
+          WHERE e.ID = ?
+          `,
+          [id]
+        );
+        empleado = rows[0];
+      } else {
+        const [rows] = await req.app.locals.db.query(
+          `
+          SELECT
+            e.ID,
+            e.NombreCompleto,
+            e.CorreoElectronico,
+            e.RolApp,
+            e.FechaIngreso,
+            e.FechaNacimiento,
+            e.Celular,
+            e.TelefonoEmergencia,
+            p.Nombre AS PuestoNombre,
+            u.Activo AS UsuarioActivo
+          FROM empleados e
+          LEFT JOIN puestos p ON e.PuestoID = p.ID
+          LEFT JOIN usuarios u ON e.UsuarioID = u.ID
+          WHERE e.ID = ?
+          `,
+          [id]
+        );
+        empleado = rows[0];
       }
-    }
 
-    if (!empleado) {
-      return res.status(404).json({
-        success: false,
-        message: 'Empleado no encontrado'
+      if (!empleado) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empleado no encontrado'
+        });
+      }
+
+      empleado = formatDateFields(empleado, ['FechaIngreso', 'FechaNacimiento'], ['createdAt', 'updatedAt']);
+
+      const [userRows] = await req.app.locals.db.query(
+        'SELECT Activo FROM usuarios WHERE ID = ?',
+        [empleado.UsuarioID]
+      );
+      empleado.UsuarioActivo = userRows[0]?.Activo || false;
+
+      const [departamentosRows] = await req.app.locals.db.query(
+        `SELECT d.* 
+         FROM departamentos d
+         INNER JOIN empleadodepartamentos ed ON d.ID = ed.DepartamentoID
+         WHERE ed.EmpleadoID = ? AND d.Activo = TRUE
+         ORDER BY d.Nombre`,
+        [id]
+      );
+
+      const [jefesRows] = await req.app.locals.db.query(
+        `SELECT 
+          j.ID,
+          j.NombreCompleto,
+          j.CorreoElectronico,
+          j.RolApp,
+          p.Nombre as PuestoNombre
+         FROM empleados j
+         LEFT JOIN puestos p ON j.PuestoID = p.ID
+         INNER JOIN empleadojefes ej ON j.ID = ej.JefeID
+         WHERE ej.EmpleadoID = ?
+         ORDER BY j.NombreCompleto`,
+        [id]
+      );
+
+      const departamentosFormateados = formatArrayDates(departamentosRows, [], ['createdAt', 'updatedAt']);
+      const jefesFormateados = formatArrayDates(jefesRows, ['FechaIngreso'], ['createdAt', 'updatedAt']);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          ...empleado,
+          departamentos: departamentosFormateados,
+          jefes: jefesFormateados
+        }
       });
+
+    } catch (error) {
+      next(error);
     }
+  },
 
-    // Obtener estado del usuario
-    const [userRows] = await req.app.locals.db.query(
-      'SELECT Activo FROM usuarios WHERE ID = ?',
-      [empleado.UsuarioID]
-    );
-    empleado.UsuarioActivo = userRows[0]?.Activo || false;
+  actualizarEmpleado: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { departamentos, jefes, ...otrosCampos } = req.body;
 
-    // Obtener departamentos del empleado
-    const [departamentosRows] = await req.app.locals.db.query(
-      `SELECT d.* 
-       FROM departamentos d
-       INNER JOIN empleadodepartamentos ed ON d.ID = ed.DepartamentoID
-       WHERE ed.EmpleadoID = ? AND d.Activo = TRUE
-       ORDER BY d.Nombre`,
-      [id]
-    );
-
-    // Obtener jefes del empleado
-    const [jefesRows] = await req.app.locals.db.query(
-      `SELECT 
-        j.ID,
-        j.NombreCompleto,
-        j.CorreoElectronico,
-        j.RolApp,
-        p.Nombre as PuestoNombre
-       FROM empleados j
-       LEFT JOIN puestos p ON j.PuestoID = p.ID
-       INNER JOIN empleadojefes ej ON j.ID = ej.JefeID
-       WHERE ej.EmpleadoID = ?
-       ORDER BY j.NombreCompleto`,
-      [id]
-    );
-
-    // LOG DETALLADO de cada jefe encontrado
-    jefesRows.forEach((jefe, index) => {
-    });
-
-    res.status(200).json({
-      success: true,
-      data: {
-        ...empleado,
-        departamentos: departamentosRows,
-        jefes: jefesRows
+      if (otrosCampos.fechaNacimiento) {
+        otrosCampos.fechaNacimiento = new Date(otrosCampos.fechaNacimiento).toISOString().split('T')[0];
       }
-    });
 
-  } catch (error) {
-    console.error('❌ Error en obtenerEmpleado:', error);
-    next(error);
-  }
-},
+      await Empleado.update(id, otrosCampos);
+      
+      if (departamentos !== undefined) {
+        await Empleado.updateDepartamentos(id, departamentos);
+      }
+      
+      if (jefes !== undefined) {
+        await Empleado.updateJefes(id, jefes);
+      }
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Empleado actualizado exitosamente' 
+      });
 
-  // Actualizar empleado
-actualizarEmpleado: async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { departamentos, jefes, ...otrosCampos } = req.body;
-
-    // Actualizar datos básicos
-    await Empleado.update(id, otrosCampos);
-    
-    // Actualizar departamentos si vienen en la petición
-    if (departamentos !== undefined) {
-      await Empleado.updateDepartamentos(id, departamentos);
+    } catch (error) {
+      next(error);
     }
-    
-    // Actualizar jefes si vienen en la petición
-    if (jefes !== undefined) {
-      await Empleado.updateJefes(id, jefes);
-    }
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Empleado actualizado exitosamente' 
-    });
+  },
 
-  } catch (error) {
-    console.error('❌ Error en actualizarEmpleado:', error);
-    next(error);
-  }
-},
-
-  // Cambiar estado del empleado (activar/desactivar)
   cambiarEstadoEmpleado: async (req, res, next) => {
     try {
       const { id } = req.params;
       const { activo } = req.body;
 
-      // Validar que se envió el estado
       if (activo === undefined) {
         return res.status(400).json({
           success: false,
@@ -366,7 +354,6 @@ actualizarEmpleado: async (req, res, next) => {
         });
       }
 
-      // Verificar que el empleado existe
       const [empleado] = await req.app.locals.db.query(
         `SELECT e.ID, e.UsuarioID, u.Activo 
          FROM empleados e
@@ -382,7 +369,6 @@ actualizarEmpleado: async (req, res, next) => {
         });
       }
 
-      // Actualizar el estado del usuario asociado
       await req.app.locals.db.query(
         'UPDATE usuarios SET Activo = ? WHERE ID = ?',
         [activo, empleado[0].UsuarioID]
@@ -398,81 +384,68 @@ actualizarEmpleado: async (req, res, next) => {
       });
 
     } catch (error) {
-      console.error('Error cambiando estado del empleado:', error);
       next(error);
     }
   },
 
-// Eliminar empleado (soft delete)
-eliminarEmpleado: async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    // Verificar que el empleado existe
-    const [empleado] = await req.app.locals.db.query(
-      `SELECT e.ID, e.UsuarioID, u.Activo 
-       FROM empleados e
-       JOIN usuarios u ON e.UsuarioID = u.ID
-       WHERE e.ID = ?`,
-      [id]
-    );
-
-    if (empleado.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Empleado no encontrado'
-      });
-    }
-
-    // Verificar si ya está eliminado lógicamente
-    if (!empleado[0].Activo) {
-      return res.status(400).json({
-        success: false,
-        message: 'El empleado ya está desactivado'
-      });
-    }
-
-    // Iniciar transacción
-    const connection = await req.app.locals.db.getConnection();
-    await connection.beginTransaction();
-
+  eliminarEmpleado: async (req, res, next) => {
     try {
-      // 1. Desactivar el usuario (soft delete principal)
-      await connection.query(
-        'UPDATE usuarios SET Activo = FALSE WHERE ID = ?',
-        [empleado[0].UsuarioID]
+      const { id } = req.params;
+
+      const [empleado] = await req.app.locals.db.query(
+        `SELECT e.ID, e.UsuarioID, u.Activo 
+         FROM empleados e
+         JOIN usuarios u ON e.UsuarioID = u.ID
+         WHERE e.ID = ?`,
+        [id]
       );
 
-      // 2. Opcional: Desactivar relaciones donde es jefe
-      // (esto evita que aparezca en listados de jefes activos)
-      // Pero mantenemos las relaciones históricas en la tabla
-      
-      await connection.commit();
+      if (empleado.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Empleado no encontrado'
+        });
+      }
 
-      res.status(200).json({
-        success: true,
-        message: 'Empleado desactivado exitosamente (eliminado lógico)',
-        data: {
-          id: parseInt(id),
-          activo: false
-        }
-      });
+      if (!empleado[0].Activo) {
+        return res.status(400).json({
+          success: false,
+          message: 'El empleado ya está desactivado'
+        });
+      }
+
+      const connection = await req.app.locals.db.getConnection();
+      await connection.beginTransaction();
+
+      try {
+        await connection.query(
+          'UPDATE usuarios SET Activo = FALSE WHERE ID = ?',
+          [empleado[0].UsuarioID]
+        );
+
+        await connection.commit();
+
+        res.status(200).json({
+          success: true,
+          message: 'Empleado desactivado exitosamente',
+          data: {
+            id: parseInt(id),
+            activo: false
+          }
+        });
+
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
 
     } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
+      next(error);
     }
+  },
 
-  } catch (error) {
-    console.error('Error eliminando empleado:', error);
-    next(error);
-  }
-},
-
-
-  // Obtener catálogos
   obtenerCatalogos: async (req, res, next) => {
     try {
       const [puestos, departamentos, empleados] = await Promise.all([
@@ -481,9 +454,16 @@ eliminarEmpleado: async (req, res, next) => {
         Catalogo.getEmpleadosSelect()
       ]);
 
+      const puestosFormateados = formatArrayDates(puestos, [], ['createdAt', 'updatedAt']);
+      const departamentosFormateados = formatArrayDates(departamentos, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
-        data: { puestos, departamentos, empleados }
+        data: { 
+          puestos: puestosFormateados, 
+          departamentos: departamentosFormateados, 
+          empleados 
+        }
       });
 
     } catch (error) {

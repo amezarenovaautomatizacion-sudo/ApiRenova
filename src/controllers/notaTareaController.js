@@ -1,8 +1,8 @@
 const NotaTarea = require('../models/notaTareaModel');
 const Proyecto = require('../models/proyectoModel');
+const { formatArrayDates, formatDateFields } = require('../utils/dateFormatter');
 
 const notaTareaController = {
-  // Crear nota en tarea
   crearNota: async (req, res, next) => {
     try {
       const { id: proyectoId, tareaId } = req.params;
@@ -10,7 +10,6 @@ const notaTareaController = {
       const usuarioRol = req.user.rol;
       const { contenido, esPrivada } = req.body;
 
-      // Validaciones
       if (!contenido) {
         return res.status(400).json({
           success: false,
@@ -18,7 +17,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar acceso al proyecto
       const tieneAcceso = await Proyecto.verificarAcceso(proyectoId, usuarioId, usuarioRol);
       if (!tieneAcceso) {
         return res.status(403).json({
@@ -27,7 +25,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar que la tarea pertenezca al proyecto
       const [verificacion] = await req.app.locals.db.query(`
         SELECT 1 FROM tareas 
         WHERE ID = ? AND ProyectoID = ? AND Activo = 1
@@ -40,7 +37,6 @@ const notaTareaController = {
         });
       }
 
-      // Obtener ID del empleado
       const [empleado] = await req.app.locals.db.query(`
         SELECT ID FROM empleados WHERE UsuarioID = ?
       `, [usuarioId]);
@@ -61,11 +57,13 @@ const notaTareaController = {
       };
 
       const nuevaNota = await NotaTarea.crear(notaData);
+      
+      const notaFormateada = formatDateFields(nuevaNota, [], ['createdAt', 'updatedAt']);
 
       res.status(201).json({
         success: true,
         message: 'Nota creada exitosamente',
-        data: nuevaNota
+        data: notaFormateada
       });
 
     } catch (error) {
@@ -73,14 +71,12 @@ const notaTareaController = {
     }
   },
 
-  // Listar notas de tarea
   listarNotas: async (req, res, next) => {
     try {
       const { id: proyectoId, tareaId } = req.params;
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
 
-      // Verificar acceso al proyecto
       const tieneAcceso = await Proyecto.verificarAcceso(proyectoId, usuarioId, usuarioRol);
       if (!tieneAcceso) {
         return res.status(403).json({
@@ -89,7 +85,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar que la tarea pertenezca al proyecto
       const [verificacion] = await req.app.locals.db.query(`
         SELECT 1 FROM tareas 
         WHERE ID = ? AND ProyectoID = ? AND Activo = 1
@@ -103,10 +98,12 @@ const notaTareaController = {
       }
 
       const notas = await NotaTarea.listarPorTarea(tareaId, usuarioId, usuarioRol);
+      
+      const notasFormateadas = formatArrayDates(notas, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
-        data: notas
+        data: notasFormateadas
       });
 
     } catch (error) {
@@ -120,7 +117,6 @@ const notaTareaController = {
     }
   },
 
-  // Actualizar nota
   actualizarNota: async (req, res, next) => {
     try {
       const { id: proyectoId, tareaId, notaId } = req.params;
@@ -128,7 +124,6 @@ const notaTareaController = {
       const usuarioRol = req.user.rol;
       const { contenido, esPrivada } = req.body;
 
-      // Validaciones
       if (!contenido) {
         return res.status(400).json({
           success: false,
@@ -136,7 +131,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar acceso al proyecto
       const tieneAcceso = await Proyecto.verificarAcceso(proyectoId, usuarioId, usuarioRol);
       if (!tieneAcceso) {
         return res.status(403).json({
@@ -145,7 +139,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar que la nota pertenezca a la tarea
       const [verificacion] = await req.app.locals.db.query(`
         SELECT 1 FROM notas_tarea 
         WHERE ID = ? AND TareaID = ? AND Activo = 1
@@ -164,11 +157,13 @@ const notaTareaController = {
       };
 
       const notaActualizada = await NotaTarea.actualizar(notaId, notaData, usuarioId);
+      
+      const notaFormateada = formatDateFields(notaActualizada, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
         message: 'Nota actualizada exitosamente',
-        data: notaActualizada
+        data: notaFormateada
       });
 
     } catch (error) {
@@ -182,14 +177,12 @@ const notaTareaController = {
     }
   },
 
-  // Eliminar nota
   eliminarNota: async (req, res, next) => {
     try {
       const { id: proyectoId, tareaId, notaId } = req.params;
       const usuarioId = req.user.id;
       const usuarioRol = req.user.rol;
 
-      // Verificar acceso al proyecto
       const tieneAcceso = await Proyecto.verificarAcceso(proyectoId, usuarioId, usuarioRol);
       if (!tieneAcceso) {
         return res.status(403).json({
@@ -198,7 +191,6 @@ const notaTareaController = {
         });
       }
 
-      // Verificar que la nota pertenezca a la tarea
       const [verificacion] = await req.app.locals.db.query(`
         SELECT 1 FROM notas_tarea 
         WHERE ID = ? AND TareaID = ? AND Activo = 1

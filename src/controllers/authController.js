@@ -2,6 +2,7 @@ const User = require('../models/userModel');
 const Empleado = require('../models/empleadoModel');
 const { generateToken } = require('../config/jwt');
 const { comparePassword } = require('../utils/bcrypt');
+const { formatDateFields } = require('../utils/dateFormatter');
 
 const authController = {
   login: async (req, res, next) => {
@@ -31,7 +32,7 @@ const authController = {
         });
       }
 
-      const empleado = await Empleado.findByUsuarioId(user.ID);
+      let empleado = await Empleado.findByUsuarioId(user.ID);
       
       if (!empleado) {
         return res.status(401).json({
@@ -40,18 +41,22 @@ const authController = {
         });
       }
 
+      empleado = formatDateFields(empleado, ['FechaIngreso', 'FechaNacimiento'], ['createdAt', 'updatedAt']);
+
       const departamentos = await Empleado.getDepartamentos(empleado.ID);
       const jefes = await Empleado.getJefes(empleado.ID);
 
       const token = generateToken(user.ID, user.Usuario, user.Rol);
 
       const { Contrasenia, ...userWithoutPassword } = user;
+      
+      const userFormatted = formatDateFields(userWithoutPassword, [], ['createdAt', 'updatedAt']);
 
       res.status(200).json({
         success: true,
         message: 'Login exitoso',
         data: {
-          user: userWithoutPassword,
+          user: userFormatted,
           empleado: {
             ...empleado,
             departamentos,
@@ -90,11 +95,13 @@ const authController = {
 
       const token = generateToken(newUser.id, newUser.usuario);
 
+      const userFormatted = formatDateFields(newUser, [], ['createdAt', 'updatedAt']);
+
       res.status(201).json({
         success: true,
         message: 'Usuario registrado exitosamente',
         data: {
-          user: newUser,
+          user: userFormatted,
           token,
           expiresIn: '12 horas'
         }
@@ -116,8 +123,9 @@ const authController = {
         });
       }
 
-      const empleado = await Empleado.findByUsuarioId(user.ID);
+      let empleado = await Empleado.findByUsuarioId(user.ID);
       if (empleado) {
+        empleado = formatDateFields(empleado, ['FechaIngreso', 'FechaNacimiento'], ['createdAt', 'updatedAt']);
         const departamentos = await Empleado.getDepartamentos(empleado.ID);
         const jefes = await Empleado.getJefes(empleado.ID);
         
@@ -125,10 +133,12 @@ const authController = {
         empleado.jefes = jefes;
       }
 
+      const userFormatted = formatDateFields(user, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
         data: {
-          user,
+          user: userFormatted,
           empleado
         }
       });
@@ -149,10 +159,12 @@ const authController = {
         });
       }
 
+      const userFormatted = formatDateFields(user, [], ['createdAt', 'updatedAt']);
+
       res.status(200).json({
         success: true,
         message: 'Token válido',
-        data: user
+        data: userFormatted
       });
 
     } catch (error) {
@@ -160,13 +172,11 @@ const authController = {
     }
   },
 
-  // Cambiar contraseña propia (requiere token)
   changeOwnPassword: async (req, res, next) => {
     try {
       const { contraseniaActual, nuevaContrasenia } = req.body;
-      const userId = req.user.id; // Obtenido del token
+      const userId = req.user.id;
 
-      // Validar campos requeridos
       if (!contraseniaActual || !nuevaContrasenia) {
         return res.status(400).json({
           success: false,
@@ -174,7 +184,6 @@ const authController = {
         });
       }
 
-      // Validar longitud mínima de la nueva contraseña
       if (nuevaContrasenia.length < 6) {
         return res.status(400).json({
           success: false,
@@ -182,7 +191,6 @@ const authController = {
         });
       }
 
-      // Obtener usuario con su contraseña actual
       const user = await User.findByIdWithPassword(userId);
       if (!user) {
         return res.status(404).json({
@@ -191,7 +199,6 @@ const authController = {
         });
       }
 
-      // Verificar que la contraseña actual sea correcta
       const isPasswordValid = await comparePassword(contraseniaActual, user.Contrasenia);
       if (!isPasswordValid) {
         return res.status(401).json({
@@ -200,7 +207,6 @@ const authController = {
         });
       }
 
-      // Actualizar la contraseña
       const updated = await User.updatePassword(userId, nuevaContrasenia);
       
       if (!updated) {
@@ -220,14 +226,12 @@ const authController = {
     }
   },
 
-  // Cambiar contraseña de otro usuario (requiere permisos de admin)
   changeUserPassword: async (req, res, next) => {
     try {
-      const { id } = req.params; // ID del usuario a modificar
+      const { id } = req.params;
       const { nuevaContrasenia } = req.body;
-      const adminId = req.user.id; // ID del admin que realiza la acción
+      const adminId = req.user.id;
 
-      // Validar campos requeridos
       if (!nuevaContrasenia) {
         return res.status(400).json({
           success: false,
@@ -235,7 +239,6 @@ const authController = {
         });
       }
 
-      // Validar longitud mínima
       if (nuevaContrasenia.length < 6) {
         return res.status(400).json({
           success: false,
@@ -243,7 +246,6 @@ const authController = {
         });
       }
 
-      // Verificar que el usuario existe
       const user = await User.findById(id);
       if (!user) {
         return res.status(404).json({
@@ -252,7 +254,6 @@ const authController = {
         });
       }
 
-      // Verificar que el admin no se intente cambiar a sí mismo por esta ruta
       if (parseInt(id) === parseInt(adminId)) {
         return res.status(400).json({
           success: false,
@@ -260,7 +261,6 @@ const authController = {
         });
       }
 
-      // Actualizar la contraseña
       const updated = await User.updatePassword(id, nuevaContrasenia);
       
       if (!updated) {
