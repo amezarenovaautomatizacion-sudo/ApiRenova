@@ -7,13 +7,18 @@ const PermisosModel = {
     try {
       await connection.beginTransaction();
 
-      // Validar que no sea más de 24 horas antes
+      // Validar que sea con al menos 24 horas de anticipación
       const fechaInicio = new Date(solicitudData.fechaInicio);
       const ahora = new Date();
       const diferenciaHoras = (fechaInicio - ahora) / (1000 * 60 * 60);
 
-      if (diferenciaHoras > 24) {
-        throw new Error('Los permisos solo se pueden solicitar con máximo 24 horas de anticipación');
+      // Calcular fecha mínima permitida (hoy + 24 horas)
+      const fechaMinima = new Date(ahora);
+      fechaMinima.setHours(ahora.getHours() + 24);
+      const fechaMinimaStr = fechaMinima.toISOString().split('T')[0];
+
+      if (diferenciaHoras < 24) {
+        throw new Error(`Los permisos deben solicitarse con al menos 24 horas de anticipación. La fecha mínima es ${fechaMinimaStr}`);
       }
 
       // Validar que sea solo un día (para permisos de falta)
@@ -76,7 +81,8 @@ const PermisosModel = {
       return {
         solicitudId,
         aprobadores: aprobadores.length,
-        fechaInicio: solicitudData.fechaInicio
+        fechaInicio: solicitudData.fechaInicio,
+        fechaMinima: fechaMinimaStr
       };
 
     } catch (error) {
