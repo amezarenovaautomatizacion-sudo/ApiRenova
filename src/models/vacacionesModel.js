@@ -262,99 +262,291 @@ const Vacaciones = {
     }
   },
 
-  /**
-   * Procesar aprobación/rechazo de solicitud
-   */
-  procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
+/**
+ * Procesar aprobación/rechazo de solicitud
+ */
+procesarAprobacion: async (aprobacionId, aprobadorId, estado, comentarios) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
 
-      console.log(`🔍 [procesarAprobacion] INICIANDO: AprobacionID=${aprobacionId}, AprobadorID=${aprobadorId}, Estado=${estado}`);
+    console.log(`🔍 [procesarAprobacion] INICIANDO: AprobacionID=${aprobacionId}, AprobadorID=${aprobadorId}, Estado=${estado}`);
 
-      // 1. Verificar que la aprobación existe y pertenece al aprobador
-      const [aprobacionActual] = await connection.query(
-        `SELECT aps.*, s.Tipo, s.EmpleadoID, s.Estado as EstadoSolicitud
-         FROM aprobacionessolicitud aps
-         JOIN solicitudes s ON aps.SolicitudID = s.ID
-         WHERE aps.ID = ? AND aps.AprobadorID = ? AND aps.Activo = 1`,
-        [aprobacionId, aprobadorId]
-      );
+    // 1. Verificar que la aprobación existe y pertenece al aprobador
+    const [aprobacionActual] = await connection.query(
+      `SELECT aps.*, s.Tipo, s.EmpleadoID, s.Estado as EstadoSolicitud, s.DiasSolicitados, s.HorasSolicitadas, s.FechaInicio, s.FechaFin, s.Motivo
+       FROM aprobacionessolicitud aps
+       JOIN solicitudes s ON aps.SolicitudID = s.ID
+       WHERE aps.ID = ? AND aps.AprobadorID = ? AND aps.Activo = 1`,
+      [aprobacionId, aprobadorId]
+    );
 
-      if (aprobacionActual.length === 0) {
-        throw new Error('No se encontró la aprobación o no tienes permisos');
-      }
+    if (aprobacionActual.length === 0) {
+      throw new Error('No se encontró la aprobación o no tienes permisos');
+    }
 
-      const aprobacion = aprobacionActual[0];
-      const solicitudId = aprobacion.SolicitudID;
-      const estadoAnterior = aprobacion.Estado;
+    const aprobacion = aprobacionActual[0];
+    const solicitudId = aprobacion.SolicitudID;
+    const estadoAnterior = aprobacion.Estado;
+    const tipoSolicitud = aprobacion.Tipo;
 
-      console.log(`🔍 SolicitudID: ${solicitudId}, EstadoAnterior: ${estadoAnterior}`);
+    console.log(`🔍 SolicitudID: ${solicitudId}, Tipo: ${tipoSolicitud}, EstadoAnterior: ${estadoAnterior}`);
 
-      // 2. Convertir estado para BD
-      let estadoParaBD;
-      if (estado === 'aprobada' || estado === 'aprobado') {
-        estadoParaBD = 'aprobado';
-      } else if (estado === 'rechazada' || estado === 'rechazado') {
-        estadoParaBD = 'rechazado';
-      } else {
-        estadoParaBD = estado;
-      }
-      
-      console.log(`🔍 Estado convertido: ${estado} → ${estadoParaBD} para la BD`);
+    // 2. Convertir estado para BD
+    let estadoParaBD;
+    if (estado === 'aprobada' || estado === 'aprobado') {
+      estadoParaBD = 'aprobado';
+    } else if (estado === 'rechazada' || estado === 'rechazado') {
+      estadoParaBD = 'rechazado';
+    } else {
+      estadoParaBD = estado;
+    }
+    
+    console.log(`🔍 Estado convertido: ${estado} → ${estadoParaBD} para la BD`);
 
-      // 3. ACTUALIZAR LA APROBACIÓN
-      const [updateResult] = await connection.query(
-        `UPDATE aprobacionessolicitud 
-         SET Estado = ?, 
-             FechaAprobacion = NOW(), 
-             Comentarios = ?,
-             updatedAt = CURRENT_TIMESTAMP
-         WHERE ID = ? AND Activo = 1`,
-        [estadoParaBD, comentarios, aprobacionId]
-      );
+    // 3. ACTUALIZAR LA APROBACIÓN
+    const [updateResult] = await connection.query(
+      `UPDATE aprobacionessolicitud 
+       SET Estado = ?, 
+           FechaAprobacion = NOW(), 
+           Comentarios = ?,
+           updatedAt = CURRENT_TIMESTAMP
+       WHERE ID = ? AND Activo = 1`,
+      [estadoParaBD, comentarios, aprobacionId]
+    );
 
-      console.log(`🔍 Aprobación actualizada: ${updateResult.affectedRows} filas afectadas`);
+    console.log(`🔍 Aprobación actualizada: ${updateResult.affectedRows} filas afectadas`);
 
-      // 4. Registrar en historial
+    // 4. Si es rechazado, marcar todas las demás aprobaciones como rechazadas
+    if (estadoParaBD === 'rechazado') {
       await connection.query(
-        `INSERT INTO historialsolicitud 
-         (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios) 
-         VALUES (?, ?, 'aprobacion_procesada', ?, ?, ?)`,
-        [
-          solicitudId,
-          aprobadorId,
-          estadoAnterior || 'pendiente',
-          estado,
-          comentarios || `Aprobación ${estado}`
-        ]
+        `UPDATE aprobacionessolicitud 
+         SET Estado = 'rechazado',
+             Comentarios = CONCAT(IFNULL(Comentarios, ''), ' | Rechazado automáticamente por rechazo de aprobador ', ?),
+             FechaAprobacion = NOW(),
+             updatedAt = NOW()
+         WHERE SolicitudID = ? 
+           AND Estado = 'pendiente'
+           AND Activo = 1
+           AND ID != ?`,
+        [aprobadorId, solicitudId, aprobacionId]
       );
-
-      await connection.commit();
-
-      // 5. Verificar el estado actual de la solicitud después del trigger
-      const [solicitudActualizada] = await connection.query(
-        'SELECT Estado FROM solicitudes WHERE ID = ?',
+      
+      // Actualizar solicitud a rechazada
+      await connection.query(
+        `UPDATE solicitudes 
+         SET Estado = 'rechazada',
+             updatedAt = CURRENT_TIMESTAMP
+         WHERE ID = ?`,
         [solicitudId]
       );
-
-      return {
-        success: true,
-        aprobacionId,
-        solicitudId,
-        estado: estado,
-        estadoSolicitud: solicitudActualizada[0]?.Estado,
-        mensaje: `Aprobación ${estado} exitosamente.`
-      };
-
-    } catch (error) {
-      console.error('❌ Error en procesarAprobacion:', error);
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
+      
+      console.log(`✅ Solicitud ${solicitudId} marcada como rechazada`);
+    } 
+    // 5. Si es aprobado, verificar si todas las aprobaciones están completadas
+    else if (estadoParaBD === 'aprobado') {
+      // Contar aprobaciones pendientes
+      const [aprobacionesPendientes] = await connection.query(
+        `SELECT COUNT(*) as pendientes 
+         FROM aprobacionessolicitud 
+         WHERE SolicitudID = ? 
+           AND Estado IN ('pendiente') 
+           AND Activo = 1`,
+        [solicitudId]
+      );
+      
+      const pendientes = aprobacionesPendientes[0].pendientes;
+      
+      if (pendientes === 0) {
+        // Todas las aprobaciones están completadas
+        await connection.query(
+          `UPDATE solicitudes 
+           SET Estado = 'aprobada',
+               updatedAt = CURRENT_TIMESTAMP
+           WHERE ID = ?`,
+          [solicitudId]
+        );
+        
+        console.log(`✅ Solicitud ${solicitudId} completamente aprobada`);
+        
+        // Si es vacaciones, actualizar días tomados
+        if (tipoSolicitud === 'vacaciones' && aprobacion.DiasSolicitados > 0) {
+          // Actualizar vacaciones del empleado
+          await connection.query(
+            `UPDATE vacacionesempleado 
+             SET DiasTomados = DiasTomados + ?,
+                 DiasDisponibles = DiasDisponibles - ?,
+                 updatedAt = NOW()
+             WHERE EmpleadoID = ?`,
+            [aprobacion.DiasSolicitados, aprobacion.DiasSolicitados, aprobacion.EmpleadoID]
+          );
+          
+          // Crear incidencia de vacaciones aprobadas
+          const [tipoIncidencia] = await connection.query(
+            `SELECT ID FROM tiposincidencia WHERE Nombre = 'Vacaciones aprobadas' LIMIT 1`
+          );
+          
+          if (tipoIncidencia.length > 0) {
+            await connection.query(
+              `INSERT INTO incidencias (
+                EmpleadoID, TipoIncidenciaID, Descripcion, FechaIncidencia,
+                Observaciones, CreadoPor, SolicitudID, Activo
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+              [
+                aprobacion.EmpleadoID,
+                tipoIncidencia[0].ID,
+                `Vacaciones aprobadas: ${aprobacion.DiasSolicitados} días del ${aprobacion.FechaInicio} al ${aprobacion.FechaFin}`,
+                aprobacion.FechaInicio,
+                `Motivo: ${aprobacion.Motivo}. Aprobado por sistema.`,
+                aprobadorId,
+                solicitudId
+              ]
+            );
+          }
+        }
+        
+        // Si es permiso, crear incidencia
+        else if (tipoSolicitud === 'permiso') {
+          const [tipoIncidencia] = await connection.query(
+            `SELECT ID FROM tiposincidencia WHERE Nombre = 'Permiso con goce' LIMIT 1`
+          );
+          
+          if (tipoIncidencia.length > 0) {
+            await connection.query(
+              `INSERT INTO incidencias (
+                EmpleadoID, TipoIncidenciaID, Descripcion, FechaIncidencia,
+                Observaciones, CreadoPor, SolicitudID, Activo
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+              [
+                aprobacion.EmpleadoID,
+                tipoIncidencia[0].ID,
+                `Permiso aprobado para el ${aprobacion.FechaInicio}`,
+                aprobacion.FechaInicio,
+                `Motivo: ${aprobacion.Motivo}. Aprobado por sistema.`,
+                aprobadorId,
+                solicitudId
+              ]
+            );
+          }
+        }
+        
+        // Si es horas extras, crear incidencia
+        else if (tipoSolicitud === 'horas_extras') {
+          const [tipoIncidencia] = await connection.query(
+            `SELECT ID FROM tiposincidencia WHERE Nombre = 'Horas extras' LIMIT 1`
+          );
+          
+          if (tipoIncidencia.length > 0) {
+            await connection.query(
+              `INSERT INTO incidencias (
+                EmpleadoID, TipoIncidenciaID, Descripcion, FechaIncidencia,
+                Observaciones, CreadoPor, SolicitudID, Activo
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+              [
+                aprobacion.EmpleadoID,
+                tipoIncidencia[0].ID,
+                `Horas extras aprobadas: ${aprobacion.HorasSolicitadas} horas para el ${aprobacion.FechaInicio}`,
+                aprobacion.FechaInicio,
+                `Motivo: ${aprobacion.Motivo}. Aprobado por sistema.`,
+                aprobadorId,
+                solicitudId
+              ]
+            );
+          }
+        }
+      } else {
+        console.log(`⏳ Solicitud ${solicitudId} tiene ${pendientes} aprobaciones pendientes más`);
+        
+        // Buscar el siguiente aprobador y notificar
+        const [siguienteAprobador] = await connection.query(
+          `SELECT AprobadorID, OrdenAprobacion 
+           FROM aprobacionessolicitud 
+           WHERE SolicitudID = ? 
+             AND Estado = 'pendiente'
+             AND Activo = 1
+           ORDER BY OrdenAprobacion
+           LIMIT 1`,
+          [solicitudId]
+        );
+        
+        if (siguienteAprobador.length > 0) {
+          // Obtener nombre del empleado
+          const [empleado] = await connection.query(
+            `SELECT NombreCompleto FROM empleados WHERE ID = ?`,
+            [aprobacion.EmpleadoID]
+          );
+          
+          const nombreEmpleado = empleado.length > 0 ? empleado[0].NombreCompleto : 'Empleado';
+          
+          // Crear notificación para el siguiente aprobador
+          await connection.query(
+            `INSERT INTO notificaciones_personales (
+              UsuarioID, TipoNotificacionID, Titulo, Mensaje, DatosExtra, VigenciaDias, Activo
+            ) VALUES (
+              ?, 
+              (SELECT ID FROM tipos_notificacion WHERE Nombre = 'aprobacion_pendiente'),
+              ?,
+              ?,
+              ?,
+              7,
+              1
+            )`,
+            [
+              siguienteAprobador[0].AprobadorID,
+              `⏳ Aprobación Pendiente - ${tipoSolicitud.toUpperCase()}`,
+              `${nombreEmpleado} tiene una solicitud de ${tipoSolicitud} pendiente de tu aprobación (Aprobador #${siguienteAprobador[0].OrdenAprobacion})`,
+              JSON.stringify({
+                solicitud_id: solicitudId,
+                tipo: tipoSolicitud,
+                empleado: nombreEmpleado,
+                orden: siguienteAprobador[0].OrdenAprobacion
+              })
+            ]
+          );
+        }
+      }
     }
-  },
+
+    // 6. Registrar en historial
+    await connection.query(
+      `INSERT INTO historialsolicitud 
+       (SolicitudID, UsuarioID, Accion, EstadoAnterior, EstadoNuevo, Comentarios, createdAt) 
+       VALUES (?, ?, 'aprobacion_procesada', ?, ?, ?, NOW())`,
+      [
+        solicitudId,
+        aprobadorId,
+        estadoAnterior || 'pendiente',
+        estadoParaBD,
+        comentarios || `Aprobación ${estado}`
+      ]
+    );
+
+    await connection.commit();
+    console.log(`✅ Aprobación ${aprobacionId} procesada exitosamente`);
+    
+    // Obtener el estado actualizado de la solicitud
+    const [solicitudActualizada] = await connection.query(
+      'SELECT Estado FROM solicitudes WHERE ID = ?',
+      [solicitudId]
+    );
+
+    return {
+      success: true,
+      aprobacionId,
+      solicitudId,
+      estado: estadoParaBD,
+      estadoSolicitud: solicitudActualizada[0]?.Estado || 'pendiente',
+      mensaje: `Aprobación ${estado} exitosamente.`
+    };
+
+  } catch (error) {
+    console.error('❌ Error en procesarAprobacion:', error);
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+},
 
   /**
    * Editar aprobación (cambiar de opinión)
